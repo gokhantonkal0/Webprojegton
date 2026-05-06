@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Bilgisi Quiz Uygulaması</title>
+    <title>Web Bilgisi Quiz Multiplayer</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
@@ -24,14 +24,14 @@
     <!-- Navigasyon Çubuğu -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
         <div class="container">
-            <a class="navbar-brand fw-bold" href="#"><i class="bi bi-code-slash me-2"></i>WebQuiz Pro</a>
+            <a class="navbar-brand fw-bold" href="#" id="nav-brand-btn"><i class="bi bi-code-slash me-2"></i>WebQuiz Pro <span class="badge bg-danger ms-1">LIVE</span></a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
                 <ul class="navbar-nav align-items-center">
                     <li class="nav-item me-2">
-                        <button id="btn-admin-panel" class="btn btn-outline-light btn-sm"><i class="bi bi-gear-fill me-1"></i>Admin</button>
+                        <button id="btn-admin-panel" class="btn btn-outline-light btn-sm"><i class="bi bi-gear-fill me-1"></i>Soru Ekle</button>
                     </li>
                     <li class="nav-item">
                         <button id="btn-dark-mode" class="btn btn-outline-warning btn-sm"><i class="bi bi-moon-fill"></i> Dark Mode</button>
@@ -57,48 +57,73 @@
             </div>
         </div>
 
-        <div class="row w-100 justify-content-center mx-0 align-items-start">
+        <div class="row w-100 justify-content-center mx-0 align-items-start" id="main-row">
             
-            <!-- Quiz Kartı Sütunu -->
+            <!-- Ana Kart Sütunu -->
             <div class="col-lg-8 col-md-12 mb-4 d-flex justify-content-center">
                 <div class="card shadow quiz-card w-100 border-0" style="max-width: 650px;">
                     <div class="card-body p-4 p-md-5 text-center position-relative">
                         
-                        <!-- 1. BAŞLANGIÇ EKRANI -->
-                        <div id="baslangic-ekrani">
-                            <h1 class="card-title h2 mb-3 text-primary fw-bold">Web Master Quiz</h1>
-                            <p class="card-text text-muted mb-4">Gerçek bir Frontend yeteneği misin? Kendini test et!</p>
+                        <!-- 0. ROL SEÇİM EKRANI -->
+                        <div id="rol-secim-ekrani">
+                            <h1 class="card-title h2 mb-3 text-primary fw-bold">Kahoot Quiz'e Hoşgeldin</h1>
+                            <p class="card-text text-muted mb-4">Lütfen giriş türünüzü seçiniz.</p>
                             
-                            <div class="row text-start mb-4 bg-body-tertiary p-3 rounded border">
-                                <div class="col-md-12 mb-3">
-                                    <label for="oyuncu-ismi" class="form-label fw-bold"><i class="bi bi-person-badge"></i> Oyuncu Adı:</label>
-                                    <input type="text" id="oyuncu-ismi" class="form-control form-control-lg" placeholder="Adınızı giriniz...">
-                                    <div id="isim-hata" class="text-danger mt-1 d-none small fw-bold">İsim girmek zorunludur!</div>
-                                </div>
-                                <div class="col-md-6 mb-3 mb-md-0">
-                                    <label for="kategori-secimi" class="form-label fw-bold"><i class="bi bi-tags"></i> Kategori:</label>
-                                    <select id="kategori-secimi" class="form-select">
-                                        <option value="Tümü">Tümü (Karışık)</option>
-                                        <option value="HTML">HTML</option>
-                                        <option value="CSS">CSS</option>
-                                        <option value="JS">JavaScript</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="zorluk-secimi" class="form-label fw-bold"><i class="bi bi-bar-chart"></i> Zorluk:</label>
-                                    <select id="zorluk-secimi" class="form-select">
-                                        <option value="Tümü">Tümü</option>
-                                        <option value="Kolay">Kolay</option>
-                                        <option value="Orta">Orta</option>
-                                        <option value="Zor">Zor</option>
-                                    </select>
-                                </div>
+                            <div class="d-flex flex-column gap-3">
+                                <button id="btn-host-sec" class="btn btn-danger btn-lg p-4 fw-bold shadow-sm d-flex align-items-center justify-content-center">
+                                    <i class="bi bi-display fs-2 me-3"></i> <div><span class="d-block fs-4">Host Ol</span><small class="fw-normal">Oda kur ve yönet</small></div>
+                                </button>
+                                <button id="btn-oyuncu-sec" class="btn btn-primary btn-lg p-4 fw-bold shadow-sm d-flex align-items-center justify-content-center">
+                                    <i class="bi bi-phone fs-2 me-3"></i> <div><span class="d-block fs-4">Oyuncu Ol</span><small class="fw-normal">Bir odaya katıl</small></div>
+                                </button>
                             </div>
-
-                            <button id="btn-basla" class="btn btn-primary btn-lg px-5 w-100 fw-bold shadow">🚀 Quizi Başlat</button>
                         </div>
 
-                        <!-- 2. QUİZ EKRANI (Başlangıçta gizli - d-none) -->
+                        <!-- 1. HOST LOBİ EKRANI -->
+                        <div id="host-lobi-ekrani" class="d-none">
+                            <h2 class="text-danger fw-bold"><i class="bi bi-broadcast"></i> Canlı Oda Kuruldu</h2>
+                            <p class="text-muted">Oyuncuların odaya katılmasını bekleyin...</p>
+                            
+                            <div class="bg-dark text-white rounded p-3 mb-4 mt-3">
+                                <span class="d-block text-white-50 mb-1">ODA KODU:</span>
+                                <h1 class="display-3 fw-bold tracking-wider mb-0 text-warning" id="host-oda-kodu">000000</h1>
+                            </div>
+                            
+                            <div class="d-flex justify-content-center mb-4">
+                                <div id="qrcode" class="p-2 bg-white rounded shadow-sm"></div>
+                            </div>
+                            
+                            <p class="small text-muted">Oyuncular aşağıdaki linkten katılabilir:<br> <a href="#" id="host-join-link" target="_blank" class="text-primary text-break">Link</a></p>
+
+                            <button id="btn-host-baslat" class="btn btn-success btn-lg w-100 fw-bold shadow mt-2" disabled>🚀 Sınavı Başlat (<span id="host-oyuncu-sayisi">0</span> Katılımcı)</button>
+                        </div>
+
+                        <!-- 2. OYUNCU GİRİŞ EKRANI -->
+                        <div id="oyuncu-giris-ekrani" class="d-none">
+                            <h2 class="text-primary fw-bold"><i class="bi bi-person-fill-add"></i> Odaya Katıl</h2>
+                            
+                            <div class="text-start mt-4">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Oda Kodu:</label>
+                                    <input type="text" id="oyuncu-oda-kodu" class="form-control form-control-lg text-center fw-bold text-uppercase tracking-wider" placeholder="6 Haneli Kod" maxlength="6">
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Oyuncu Adı:</label>
+                                    <input type="text" id="oyuncu-ismi" class="form-control form-control-lg" placeholder="Adınızı giriniz...">
+                                </div>
+                                <button id="btn-oyuncu-katil" class="btn btn-primary btn-lg w-100 fw-bold shadow">Bağlan</button>
+                            </div>
+                        </div>
+
+                        <!-- 3. OYUNCU BEKLEME EKRANI (Lobi) -->
+                        <div id="oyuncu-bekleme-ekrani" class="d-none">
+                            <i class="bi bi-hourglass-split display-1 text-primary mb-3"></i>
+                            <h2 class="fw-bold">Bağlandın!</h2>
+                            <p class="fs-5 text-muted">Host'un sınavı başlatması bekleniyor...</p>
+                            <p class="text-danger small fw-bold">Lütfen bu ekrandan ayrılmayın.</p>
+                        </div>
+
+                        <!-- 4. QUİZ EKRANI (Oyun İçi) -->
                         <div id="quiz-ekrani" class="d-none">
                             
                             <!-- Üst Bilgi Çubuğu (Can, Süre) -->
@@ -109,13 +134,13 @@
                                     <i class="bi bi-heart-fill"></i>
                                 </div>
                                 <div class="fs-4 fw-bold text-dark timer-badge">
-                                    <i class="bi bi-stopwatch"></i> <span id="sayac-metni">15</span>s
+                                    <i class="bi bi-stopwatch"></i> <span id="sayac-metni">20</span>s
                                 </div>
                             </div>
                             
                             <!-- İlerleme Yüzdesi ve Progress Bar -->
                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="badge bg-secondary" id="soru-sayaci-yazi">1/10 soru tamamlandı</span>
+                                <span class="badge bg-secondary" id="soru-sayaci-yazi">Soru yükleniyor...</span>
                                 <span class="badge bg-info text-dark" id="puan-gosterge">Puan: 0</span>
                             </div>
                             <div class="progress mb-4" style="height: 10px;">
@@ -130,10 +155,13 @@
                                 <!-- Şıklar dinamik olarak yüklenecek -->
                             </div>
                             
-                            <!-- Kontrol Butonları -->
-                            <div class="d-flex justify-content-between mt-4">
-                                <button id="btn-atla" class="btn btn-outline-warning fw-bold"><i class="bi bi-skip-forward-fill"></i> Pas Geç (1 Hakkın Kaldı)</button>
-                                <button id="btn-sonraki" class="btn btn-success d-none fw-bold px-4">Sonraki Soru <i class="bi bi-arrow-right"></i></button>
+                            <!-- Host Kontrol Alanı (Sadece Host'ta görünür) -->
+                            <div id="host-kontrol-alani" class="mt-4 d-none">
+                                <div class="alert alert-warning text-dark text-start mb-3">
+                                    <i class="bi bi-info-circle-fill"></i> <strong>Host Paneli:</strong> Şu an bu soruyu <span id="host-cevap-veren-sayisi" class="fw-bold">0</span>/<span id="host-toplam-oyuncu" class="fw-bold">0</span> kişi cevapladı.
+                                </div>
+                                <button id="btn-host-sonraki" class="btn btn-success btn-lg w-100 fw-bold shadow"><i class="bi bi-fast-forward-fill"></i> Sonraki Soruya Geç</button>
+                                <button id="btn-host-bitir" class="btn btn-danger w-100 fw-bold mt-2 d-none">Sınavı Bitir</button>
                             </div>
                         </div>
 
@@ -141,14 +169,14 @@
                 </div>
             </div>
             
-            <!-- Liderlik Tablosu Sütunu -->
+            <!-- Liderlik Tablosu Sütunu (Sağ Panel) -->
             <div class="col-lg-4 col-md-12 d-flex justify-content-center">
                 <div class="card shadow quiz-card w-100 border-0" style="max-width: 400px; height: fit-content;">
-                    <div class="card-header bg-dark text-white text-center fw-bold py-3 fs-5">
-                        <i class="bi bi-trophy-fill text-warning"></i> En Hızlılar Tablosu
+                    <div class="card-header bg-dark text-white text-center fw-bold py-3 fs-5" id="liderlik-baslik">
+                        <i class="bi bi-people-fill text-warning"></i> Canlı Sıralama
                     </div>
                     <ul class="list-group list-group-flush" id="liderlik-tablosu">
-                        <li class="list-group-item text-muted text-center py-4">Henüz skor kaydedilmedi.</li>
+                        <li class="list-group-item text-muted text-center py-4">Oda oluşturulmadı.</li>
                     </ul>
                 </div>
             </div>
@@ -165,53 +193,18 @@
 
     <!-- SONUÇ MODALI -->
     <div class="modal fade" id="sonucModal" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+        <!-- ... (Aynı modal HTML) ... -->
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content border-0 shadow-lg quiz-modal">
                 <div class="modal-header bg-primary text-white border-0">
-                    <h5 class="modal-title fw-bold"><i class="bi bi-flag-fill"></i> Quiz Tamamlandı!</h5>
+                    <h5 class="modal-title fw-bold"><i class="bi bi-flag-fill"></i> Sınav Tamamlandı!</h5>
                 </div>
                 <div class="modal-body text-center p-4">
-                    
                     <div id="rozet-alani" class="mb-4">
                         <h2 id="rozet-ikon" class="display-1 mb-2">🏆</h2>
-                        <h4 id="rozet-isim" class="text-primary fw-bold">Web Master</h4>
+                        <h4 id="rozet-isim" class="text-primary fw-bold">Sonuçlar Yükleniyor...</h4>
                     </div>
-
-                    <div class="row g-3 mb-4">
-                        <div class="col-6 col-md-3">
-                            <div class="p-3 bg-success bg-opacity-10 rounded text-success border border-success h-100">
-                                <div class="small fw-bold">DOĞRU</div>
-                                <div class="fs-3 fw-bold" id="modal-dogru">0</div>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <div class="p-3 bg-danger bg-opacity-10 rounded text-danger border border-danger h-100">
-                                <div class="small fw-bold">YANLIŞ</div>
-                                <div class="fs-3 fw-bold" id="modal-yanlis">0</div>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <div class="p-3 bg-info bg-opacity-10 rounded text-info border border-info h-100">
-                                <div class="small fw-bold text-dark">SÜRE</div>
-                                <div class="fs-3 fw-bold text-dark" id="modal-sure">0s</div>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <div class="p-3 bg-primary bg-opacity-10 rounded text-primary border border-primary h-100">
-                                <div class="small fw-bold">PUAN</div>
-                                <div class="fs-3 fw-bold" id="modal-puan">0</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Yanlış Yapılan Sorular Listesi -->
-                    <div id="yanlis-sorular-alani" class="text-start mt-4 d-none">
-                        <h5 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-exclamation-triangle text-danger"></i> Gözden Geçirilecekler:</h5>
-                        <ul class="list-group" id="yanlis-sorular-listesi">
-                            <!-- JS ile doldurulacak -->
-                        </ul>
-                    </div>
-
+                    <div class="fs-3 mb-3 fw-bold text-dark">Puanın: <span id="modal-puan">0</span></div>
                 </div>
                 <div class="modal-footer justify-content-center border-0 pb-4">
                     <button type="button" class="btn btn-primary btn-lg px-5 fw-bold shadow" id="btn-modal-yeniden">Ana Ekrana Dön</button>
@@ -222,14 +215,14 @@
 
     <!-- FAKE ADMIN PANELI MODALI -->
     <div class="modal fade" id="adminModal" tabindex="-1" aria-hidden="true">
+        <!-- ... (Aynı admin modal) ... -->
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title"><i class="bi bi-gear"></i> Soru Ekleme Paneli (Fake DB)</h5>
+                    <h5 class="modal-title"><i class="bi bi-gear"></i> Özel Soru Ekleme (Yerel)</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small">Bu alandan eklediğiniz sorular LocalStorage'a kaydedilir ve "Tümü" kategorisinde soru havuzuna düşer.</p>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Soru Metni:</label>
                         <input type="text" id="admin-soru" class="form-control" placeholder="Soru metnini yazın...">
@@ -239,16 +232,10 @@
                         <input type="text" id="admin-sik1" class="form-control border-success">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Şık 2:</label>
-                        <input type="text" id="admin-sik2" class="form-control">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Şık 3:</label>
-                        <input type="text" id="admin-sik3" class="form-control">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Şık 4:</label>
-                        <input type="text" id="admin-sik4" class="form-control">
+                        <label class="form-label fw-bold">Diğer Şıklar:</label>
+                        <input type="text" id="admin-sik2" class="form-control mb-2">
+                        <input type="text" id="admin-sik3" class="form-control mb-2">
+                        <input type="text" id="admin-sik4" class="form-control mb-2">
                     </div>
                     <div class="row">
                         <div class="col-6">
@@ -279,16 +266,25 @@
 
     <!-- Ses Efektleri için Gizli Audio Tagleri -->
     <audio id="ses-dogru" preload="auto">
-        <source src="data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq" type="audio/mpeg">
+        <source src="data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq" type="audio/mpeg">
     </audio>
     <audio id="ses-yanlis" preload="auto">
         <source src="data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq" type="audio/mpeg">
     </audio>
 
+    <!-- KÜTÜPHANELER -->
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <!-- Bootstrap JS Bundle (Modal için gerekli) -->
+    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- QRCode.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
+    <!-- Firebase App (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <!-- Firebase Realtime Database (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
     <!-- JS -->
     <script src="script.js"></script>
 </body>
