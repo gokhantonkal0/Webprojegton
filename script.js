@@ -1,119 +1,17 @@
 // ==========================================
-// AYARLAR (Gerçek sunucu için FIREBASE_KULLAN = true yapın)
+// KÜRESEL SUNUCUSUZ (MQTT) KAHOOT MOTORU
+// Herhangi bir API key veya backend gerektirmez!
+// Github Pages ve Local dahil HER YERDE çalışır.
 // ==========================================
-const FIREBASE_KULLAN = false;
 
-const firebaseAyarlari = {
-    apiKey: "BURAYA_API_KEY_GELECEK",
-    authDomain: "PROJE_ID.firebaseapp.com",
-    databaseURL: "https://PROJE_ID-default-rtdb.firebaseio.com",
-    projectId: "PROJE_ID",
-    storageBucket: "PROJE_ID.appspot.com",
-    messagingSenderId: "SENDER_ID",
-    appId: "APP_ID"
-};
+const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt'; // Ücretsiz, Public MQTT Sunucusu
+let mqttClient;
+let odaKodu = "";
+let benHostum = false;
+let oyuncuID = "";
+let oyuncuAdi = "";
 
-// ==========================================
-// BASİTLEŞTİRİLMİŞ VERİTABANI YÖNETİCİSİ
-// (Hem Firebase hem LocalStorage destekler)
-// ==========================================
-const Veritabani = {
-    _lokalVeri: JSON.parse(localStorage.getItem('kahootDB')) || {},
-    _dinleyiciler: {},
-
-    baslat() {
-        if (FIREBASE_KULLAN) {
-            if (!firebase.apps.length) firebase.initializeApp(firebaseAyarlari);
-            this.db = firebase.database();
-        } else {
-            console.warn("Lokal Test Modu: Veriler sadece tarayıcıda tutulur.");
-            // FILE:// protokolünde sekme arası veri aktarımı için Polling (Sürekli kontrol)
-            setInterval(() => {
-                let yeniVeriStr = localStorage.getItem('kahootDB');
-                let yeniVeri = yeniVeriStr ? JSON.parse(yeniVeriStr) : {};
-                if (JSON.stringify(this._lokalVeri) !== JSON.stringify(yeniVeri)) {
-                    this._lokalVeri = yeniVeri;
-                    this._tetikleHerSey();
-                }
-            }, 500); // Saniyede 2 kez kontrol et
-        }
-    },
-
-    yaz(yol, deger) {
-        if (FIREBASE_KULLAN) {
-            return this.db.ref(yol).set(deger);
-        } else {
-            this._yolAyarla(yol, deger);
-            this._lokalKaydet();
-            return Promise.resolve();
-        }
-    },
-
-    guncelle(yol, obje) {
-        if (FIREBASE_KULLAN) {
-            return this.db.ref(yol).update(obje);
-        } else {
-            let mevcut = this._yolGetir(yol) || {};
-            for (let anahtar in obje) {
-                mevcut[anahtar] = obje[anahtar];
-            }
-            this._yolAyarla(yol, mevcut);
-            this._lokalKaydet();
-            return Promise.resolve();
-        }
-    },
-
-    dinle(yol, callback) {
-        if (FIREBASE_KULLAN) {
-            this.db.ref(yol).on('value', snap => callback(snap.val()));
-        } else {
-            if (!this._dinleyiciler[yol]) this._dinleyiciler[yol] = [];
-            this._dinleyiciler[yol].push(callback);
-            callback(this._yolGetir(yol));
-        }
-    },
-
-    oku(yol) {
-        if (FIREBASE_KULLAN) {
-            return this.db.ref(yol).once('value').then(s => s.val());
-        } else {
-            return Promise.resolve(this._yolGetir(yol));
-        }
-    },
-
-    // --- LOKAL YARDIMCILAR ---
-    _lokalKaydet() {
-        localStorage.setItem('kahootDB', JSON.stringify(this._lokalVeri));
-    },
-    _yolAyarla(yol, deger) {
-        let parcalar = yol.split('/');
-        let aktif = this._lokalVeri;
-        for (let i = 0; i < parcalar.length - 1; i++) {
-            if (!aktif[parcalar[i]]) aktif[parcalar[i]] = {};
-            aktif = aktif[parcalar[i]];
-        }
-        aktif[parcalar[parcalar.length - 1]] = deger;
-    },
-    _yolGetir(yol) {
-        let parcalar = yol.split('/');
-        let aktif = this._lokalVeri;
-        for (let p of parcalar) {
-            if (aktif === undefined || aktif === null) return null;
-            aktif = aktif[p];
-        }
-        return aktif;
-    },
-    _tetikleHerSey() {
-        for (let yol in this._dinleyiciler) {
-            let deger = this._yolGetir(yol);
-            this._dinleyiciler[yol].forEach(cb => cb(deger));
-        }
-    }
-};
-
-// ==========================================
-// 15 SORULUK HAVUZ (Türkçe Değişkenler)
-// ==========================================
+// OYUN DEĞİŞKENLERİ
 let soruHavuzu = [
     { soru: "HTML'in açılımı nedir?", secenekler: ["Hyper Text Markup Language", "High Text Machine Language", "Hyper Tabular Markup Language", "Hiçbiri"], dogruCevap: 0, kategori: "HTML", zorluk: "Kolay" },
     { soru: "Web sayfasına resim eklemek için hangi HTML etiketi kullanılır?", secenekler: ["<image>", "<img>", "<pic>", "<src>"], dogruCevap: 1, kategori: "HTML", zorluk: "Kolay" },
@@ -132,11 +30,6 @@ let soruHavuzu = [
     { soru: "jQuery'de tıklama (click) olayını yakalamak için hangi metot kullanılır?", secenekler: ["onclick()", "onClick()", "click()", "bindClick()"], dogruCevap: 2, kategori: "jQuery", zorluk: "Kolay" }
 ];
 
-// OYUN DURUMU
-let odayaAitKod = "";
-let benHostum = false;
-let oyuncuID = "";
-let oyuncuAdi = "";
 let suAnkiSoruSirasi = 0;
 let soruBaslamaZamani = 0;
 let zamanSayaci;
@@ -144,258 +37,251 @@ let kalanSure = 20;
 let toplamPuanim = 0;
 let canSayisi = 3;
 
-// UI HAZIRLIK
+// Host için Liderlik Listesi Hafızası
+let hostOyuncuListesi = {}; 
+let hostAktifSoruCevaplari = {};
+
+// ==========================================
+// YÜKLEME EKRANI & BAŞLANGIÇ
+// ==========================================
 $(window).on('load', function() {
+    // Sitenin ilk açılışındaki "Yükleniyor..." u kaldır
     setTimeout(() => {
-        $("#loading-ekrani").css("opacity", "0");
-        setTimeout(() => $("#loading-ekrani").remove(), 500);
+        $("#loading-ekrani").fadeOut(400, function() { $(this).remove(); });
     }, 400);
 });
 
 $(document).ready(function() {
-    Veritabani.baslat();
     
-    // Günün Sorusunu Belirle (Sabit Havuzdan)
-    if(soruHavuzu.length > 0) {
-        let bugun = new Date();
-        let index = (bugun.getFullYear() + bugun.getMonth() + bugun.getDate()) % soruHavuzu.length;
-        let tGunun = $('<div>').text(soruHavuzu[index].soru).html();
-        $("#gunun-sorusu-metni").html(`<strong>[${soruHavuzu[index].kategori} - ${soruHavuzu[index].zorluk}]</strong> ${tGunun}`);
-    }
+    // MQTT Sunucusuna Bağlan
+    mqttClient = mqtt.connect(MQTT_BROKER);
+    
+    mqttClient.on('connect', function () {
+        console.log("MQTT Sunucusuna Bağlanıldı!");
+    });
 
-    // Linkten gelen oda kodu varsa
-    const urlParametreleri = new URLSearchParams(window.location.search);
-    const linktenGelenOda = urlParametreleri.get('room');
-    if(linktenGelenOda) {
+    mqttClient.on('message', function (topic, message) {
+        let veri;
+        try { veri = JSON.parse(message.toString()); } catch(e) { return; }
+        
+        let yolTuru = topic.split('/').pop(); // "Host", "Liderlik", "OyuncuKatil", "OyuncuCevap"
+
+        if (benHostum) {
+            // SADECE HOST'UN DİNLEDİĞİ KANALLAR
+            if (yolTuru === "OyuncuKatil") {
+                // Yeni oyuncu listeye eklendi
+                hostOyuncuListesi[veri.id] = { isim: veri.isim, puan: 0 };
+                hostLiderligiGuncelleVeYayinla();
+            }
+            else if (yolTuru === "OyuncuCevap") {
+                // Oyuncu soruya cevap verdi
+                hostAktifSoruCevaplari[veri.id] = true;
+                if(hostOyuncuListesi[veri.id]) {
+                    hostOyuncuListesi[veri.id].puan += veri.puanAldi;
+                }
+                $("#host-cevap-veren-sayisi").text(Object.keys(hostAktifSoruCevaplari).length);
+                hostLiderligiGuncelleVeYayinla();
+            }
+        } 
+        else {
+            // SADECE OYUNCUNUN DİNLEDİĞİ KANALLAR
+            if (yolTuru === "Host") {
+                oyuncuHostDurumunuYorumla(veri);
+            }
+            else if (yolTuru === "Liderlik") {
+                // Kendi puanını bul ve UI güncelle
+                if(veri[oyuncuID]) {
+                    toplamPuanim = veri[oyuncuID].puan;
+                    $("#puan-gosterge").text(`Puan: ${toplamPuanim}`);
+                }
+            }
+        }
+    });
+
+    // Günün Sorusunu Göster
+    let bugun = new Date();
+    let gIndex = (bugun.getFullYear() + bugun.getMonth() + bugun.getDate()) % soruHavuzu.length;
+    let tGunun = $('<div>').text(soruHavuzu[gIndex].soru).html();
+    $("#gunun-sorusu-metni").html(`<strong>[${soruHavuzu[gIndex].kategori}]</strong> ${tGunun}`);
+
+    // Link Parametresi Okuma (QR Koddan gelenler)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlOdaKodu = urlParams.get('room');
+    if(urlOdaKodu) {
         $("#rol-secim-ekrani").addClass("d-none");
         $("#oyuncu-giris-ekrani").removeClass("d-none");
-        $("#oyuncu-oda-kodu").val(linktenGelenOda.toUpperCase());
+        $("#oyuncu-oda-kodu").val(urlOdaKodu.toUpperCase());
     }
 
-    // Buton Tıklamaları
+    // Tıklamalar
     $("#btn-host-sec").click(() => { $("#rol-secim-ekrani").addClass("d-none"); hostOdasiniKur(); });
     $("#btn-oyuncu-sec").click(() => { $("#rol-secim-ekrani").addClass("d-none"); $("#oyuncu-giris-ekrani").removeClass("d-none"); });
     $("#btn-oyuncu-katil").click(() => oyuncuOdayaGir());
-    $("#btn-host-baslat").click(() => hostOyunuBaslat());
-    $("#btn-host-sonraki").click(() => hostSonrakiSoru());
-    $("#btn-host-bitir").click(() => Veritabani.yaz(`odalar/${odayaAitKod}/durum`, "bitti"));
     
-    // Admin Paneli ve Yeniden Oynama (Hata vermesin diye)
-    $("#btn-admin-panel").click(function() { alert("Admin paneli şu an multiplayer modda devre dışıdır."); });
-    $("#btn-modal-yeniden").click(function() { window.location.href = window.location.pathname; });
-    
-    // Dark Mode
-    $("#btn-dark-mode").click(function() {
-        $("body").toggleClass("dark-mode");
-    });
+    $("#btn-host-baslat").click(() => hostSoruGonder(0));
+    $("#btn-host-sonraki").click(() => hostSoruGonder(suAnkiSoruSirasi + 1));
+    $("#btn-host-bitir").click(() => hostOyunuBitir());
+
+    $("#btn-dark-mode").click(function() { $("body").toggleClass("dark-mode"); });
+    $("#btn-modal-yeniden").click(() => window.location.href = window.location.pathname);
+    $("#btn-admin-panel").click(() => alert("Soru Ekleme alanı Multiplayer modda kapalıdır."));
 });
 
 // ==========================================
-// 1. HOST (SUNUCU) İŞLEMLERİ
+// 1. HOST (SUNUCU) MANTIĞI
 // ==========================================
 function hostOdasiniKur() {
     benHostum = true;
-    odayaAitKod = Math.floor(100000 + Math.random() * 900000).toString(); // 6 haneli
+    odaKodu = Math.floor(100000 + Math.random() * 900000).toString(); // 6 haneli random
     
-    // Soruları karıştır ve odaya yaz
-    soruHavuzu.sort(() => Math.random() - 0.5);
+    soruHavuzu.sort(() => Math.random() - 0.5); // Soruları karıştır
 
-    let baslangicVerisi = {
-        durum: "bekliyor",
-        aktifSoruIndex: 0,
-        sorular: soruHavuzu,
-        oyuncular: {},
-        cevaplar: {}
-    };
+    // Host kanallarını dinlemeye başla
+    mqttClient.subscribe(`GTonkalQuiz/${odaKodu}/OyuncuKatil`);
+    mqttClient.subscribe(`GTonkalQuiz/${odaKodu}/OyuncuCevap`);
 
-    Veritabani.yaz(`odalar/${odayaAitKod}`, baslangicVerisi).then(() => {
-        $("#host-lobi-ekrani").removeClass("d-none");
-        $("#host-oda-kodu").text(odayaAitKod);
-        
-        let katilmaLinki = window.location.href.split('?')[0] + "?room=" + odayaAitKod;
-        $("#host-join-link").attr("href", katilmaLinki).text(katilmaLinki);
-        
-        // QR Kod
-        new QRCode(document.getElementById("qrcode"), { text: katilmaLinki, width: 200, height: 200 });
+    // Başlangıç statüsünü yayınla
+    mqttYayinla(`GTonkalQuiz/${odaKodu}/Host`, { durum: "bekliyor" });
 
-        // Oyuncuları Canlı Dinle
-        Veritabani.dinle(`odalar/${odayaAitKod}/oyuncular`, (oyuncular) => {
-            let tablo = $("#liderlik-tablosu");
-            tablo.empty();
-            let kisiSayisi = 0;
-
-            if (oyuncular) {
-                // Objeyi diziye çevir ve puana göre sırala
-                let liste = Object.keys(oyuncular).map(k => oyuncular[k]);
-                liste.sort((a, b) => b.puan - a.puan);
-                
-                liste.forEach((kisi, sira) => {
-                    kisiSayisi++;
-                    let madalyaClass = sira === 0 ? "top-1" : (sira === 1 ? "top-2" : (sira === 2 ? "top-3" : ""));
-                    tablo.append(`
-                        <li class="list-group-item liderlik-item ${madalyaClass}">
-                            <div class="d-flex align-items-center">
-                                <span class="liderlik-sira shadow-sm">${sira + 1}</span>
-                                <span class="text-truncate fw-bold">${kisi.isim}</span>
-                            </div>
-                            <div class="text-end">
-                                <span class="badge bg-primary rounded-pill px-2 py-1">${kisi.puan} Puan</span>
-                            </div>
-                        </li>
-                    `);
-                });
-            } else {
-                tablo.append('<li class="list-group-item text-muted text-center py-4">Bekleniyor...</li>');
-            }
-            
-            $("#host-oyuncu-sayisi").text(kisiSayisi);
-            $("#host-toplam-oyuncu").text(kisiSayisi);
-            $("#btn-host-baslat").prop("disabled", kisiSayisi === 0);
-        });
-    });
+    // Arayüzü Göster
+    $("#host-lobi-ekrani").removeClass("d-none");
+    $("#host-oda-kodu").text(odaKodu);
+    
+    let katilmaLinki = window.location.href.split('?')[0] + "?room=" + odaKodu;
+    $("#host-join-link").attr("href", katilmaLinki).text(katilmaLinki);
+    new QRCode(document.getElementById("qrcode"), { text: katilmaLinki, width: 200, height: 200 });
 }
 
-function hostOyunuBaslat() {
-    Veritabani.guncelle(`odalar/${odayaAitKod}`, {
-        durum: "basladi",
-        aktifSoruIndex: 0,
-        zamanDamgasi: Date.now()
-    });
+function hostLiderligiGuncelleVeYayinla() {
+    // 1. Veriyi Odaya Yayınla (Oyuncular Puanlarını Görsün Diye)
+    mqttYayinla(`GTonkalQuiz/${odaKodu}/Liderlik`, hostOyuncuListesi);
+
+    // 2. Kendi Ekranındaki Tabloyu Çiz
+    let tablo = $("#liderlik-tablosu");
+    tablo.empty();
     
+    let liste = Object.keys(hostOyuncuListesi).map(k => hostOyuncuListesi[k]);
+    liste.sort((a, b) => b.puan - a.puan);
+    
+    let kisiSayisi = liste.length;
+    
+    liste.forEach((kisi, sira) => {
+        let madalyaClass = sira === 0 ? "top-1" : (sira === 1 ? "top-2" : (sira === 2 ? "top-3" : ""));
+        tablo.append(`
+            <li class="list-group-item liderlik-item ${madalyaClass}">
+                <div class="d-flex align-items-center">
+                    <span class="liderlik-sira shadow-sm">${sira + 1}</span>
+                    <span class="text-truncate fw-bold">${kisi.isim}</span>
+                </div>
+                <div class="text-end">
+                    <span class="badge bg-primary rounded-pill px-2 py-1">${kisi.puan} Puan</span>
+                </div>
+            </li>
+        `);
+    });
+
+    if(kisiSayisi === 0) tablo.append('<li class="list-group-item text-muted text-center py-4">Bekleniyor...</li>');
+
+    $("#host-oyuncu-sayisi").text(kisiSayisi);
+    $("#host-toplam-oyuncu").text(kisiSayisi);
+    $("#btn-host-baslat").prop("disabled", kisiSayisi === 0);
+}
+
+function hostSoruGonder(index) {
+    if (index >= soruHavuzu.length || index >= 15) {
+        hostOyunuBitir();
+        return;
+    }
+
+    suAnkiSoruSirasi = index;
+    hostAktifSoruCevaplari = {}; // Yeni soru için cevapları sıfırla
+    $("#host-cevap-veren-sayisi").text("0");
+
+    let gidenSoru = soruHavuzu[index];
+    
+    // UI Değişimi
     $("#host-lobi-ekrani").addClass("d-none");
     $("#quiz-ekrani").removeClass("d-none");
     $("#host-kontrol-alani").removeClass("d-none");
     
-    hostSoruyuYonet();
-}
+    $("#soru-sayaci-yazi").text(`Soru ${index + 1}/${Math.min(soruHavuzu.length, 15)} (Host Ekranı)`);
+    $("#soru-metni").html(`<span class="badge bg-secondary me-2">${gidenSoru.zorluk}</span> ${$('<div>').text(gidenSoru.soru).html()}`);
+    
+    let btnAlan = $("#secenekler-alani");
+    btnAlan.empty();
+    gidenSoru.secenekler.forEach(s => btnAlan.append(`<button class="secenek-btn w-100 disabled text-center">${$('<div>').text(s).html()}</button>`));
 
-function hostSonrakiSoru() {
-    suAnkiSoruSirasi++;
-    if (suAnkiSoruSirasi >= soruHavuzu.length) {
-        Veritabani.yaz(`odalar/${odayaAitKod}/durum`, "bitti");
-        return;
+    if (index === Math.min(soruHavuzu.length, 15) - 1) {
+        $("#btn-host-sonraki").addClass("d-none");
+        $("#btn-host-bitir").removeClass("d-none");
     }
-    Veritabani.guncelle(`odalar/${odayaAitKod}`, {
-        aktifSoruIndex: suAnkiSoruSirasi,
-        zamanDamgasi: Date.now()
-    });
-}
 
-function hostSoruyuYonet() {
-    // Aktif Soru Değişimini Dinle
-    Veritabani.dinle(`odalar/${odayaAitKod}/aktifSoruIndex`, (index) => {
-        if (index === null) return;
-        suAnkiSoruSirasi = index;
-        let soruBilgisi = soruHavuzu[index];
-
-        $("#soru-sayaci-yazi").text(`Soru ${index + 1}/${soruHavuzu.length} (Host Ekranı)`);
-        
-        let soruEkrani = $('<div>').text(soruBilgisi.soru).html(); // HTML Injection koruması
-        $("#soru-metni").html(`<span class="badge bg-secondary me-2">${soruBilgisi.zorluk}</span> ${soruEkrani}`);
-        
-        let butonAlani = $("#secenekler-alani");
-        butonAlani.empty();
-        
-        soruBilgisi.secenekler.forEach(metin => {
-            let sikMetni = $('<div>').text(metin).html();
-            butonAlani.append(`<button class="secenek-btn w-100 disabled text-center">${sikMetni}</button>`);
-        });
-
-        // Sayacı Sıfırla
-        kalanSure = 20;
-        clearInterval(zamanSayaci);
+    // Soru sayacı
+    kalanSure = 20;
+    clearInterval(zamanSayaci);
+    $("#sayac-metni").text(kalanSure);
+    zamanSayaci = setInterval(() => {
+        kalanSure--;
         $("#sayac-metni").text(kalanSure);
-        zamanSayaci = setInterval(() => {
-            kalanSure--;
-            $("#sayac-metni").text(kalanSure);
-            if (kalanSure <= 0) clearInterval(zamanSayaci);
-        }, 1000);
+        if (kalanSure <= 0) clearInterval(zamanSayaci);
+    }, 1000);
 
-        // Bu soruya kaç kişi cevap verdi dinle
-        Veritabani.dinle(`odalar/${odayaAitKod}/cevaplar/${index}`, (cevaplar) => {
-            let sayi = cevaplar ? Object.keys(cevaplar).length : 0;
-            $("#host-cevap-veren-sayisi").text(sayi);
-        });
-
-        if (index === soruHavuzu.length - 1) {
-            $("#btn-host-sonraki").addClass("d-none");
-            $("#btn-host-bitir").removeClass("d-none");
-        }
-    });
-
-    // Oyunun bitip bitmediğini dinle
-    Veritabani.dinle(`odalar/${odayaAitKod}/durum`, (durum) => {
-        if (durum === "bitti") oyunuBitirveGoster();
+    // OYUNCULARA SORUYU YAYINLA
+    mqttYayinla(`GTonkalQuiz/${odaKodu}/Host`, {
+        durum: "soru",
+        soruObjesi: gidenSoru,
+        soruIndex: index,
+        toplamSoru: Math.min(soruHavuzu.length, 15),
+        bitisZamani: Date.now() + 20000 // 20 Saniye Süre
     });
 }
+
+function hostOyunuBitir() {
+    mqttYayinla(`GTonkalQuiz/${odaKodu}/Host`, { durum: "bitti" });
+    oyunuBitirveGoster();
+}
+
 
 // ==========================================
-// 2. OYUNCU İŞLEMLERİ
+// 2. OYUNCU MANTIĞI
 // ==========================================
 function oyuncuOdayaGir() {
-    odayaAitKod = $("#oyuncu-oda-kodu").val().trim().toUpperCase();
+    odaKodu = $("#oyuncu-oda-kodu").val().trim().toUpperCase();
     oyuncuAdi = $("#oyuncu-ismi").val().trim();
-    oyuncuID = 'oyuncu_' + Math.floor(Math.random() * 1000000); // Rastgele ID
+    oyuncuID = 'oyuncu_' + Math.floor(Math.random() * 10000000);
     
-    Veritabani.oku(`odalar/${odayaAitKod}`).then(oda => {
-        if (!oda) { alert("Oda bulunamadı!"); return; }
-        if (oda.durum === "bitti") { alert("Bu sınav bitmiş!"); return; }
-        
-        // Oyuncuyu Odaya Kaydet
-        Veritabani.yaz(`odalar/${odayaAitKod}/oyuncular/${oyuncuID}`, {
-            isim: oyuncuAdi,
-            puan: 0
-        }).then(() => {
-            $("#oyuncu-giris-ekrani").addClass("d-none");
-            
-            if (oda.durum === "bekliyor") {
-                $("#oyuncu-bekleme-ekrani").removeClass("d-none");
-            } else {
-                $("#quiz-ekrani").removeClass("d-none");
-            }
+    if(odaKodu.length !== 6 || oyuncuAdi === "") {
+        alert("Geçerli bir kod ve isim girin!"); return;
+    }
 
-            oyuncuDurumunuDinle();
-        });
-    });
+    $("#oyuncu-giris-ekrani").addClass("d-none");
+    $("#oyuncu-bekleme-ekrani").removeClass("d-none");
+
+    // Host yayınlarını dinlemeye başla
+    mqttClient.subscribe(`GTonkalQuiz/${odaKodu}/Host`);
+    mqttClient.subscribe(`GTonkalQuiz/${odaKodu}/Liderlik`);
+
+    // Host'a ben geldim mesajı at (Retain=false)
+    mqttClient.publish(`GTonkalQuiz/${odaKodu}/OyuncuKatil`, JSON.stringify({ id: oyuncuID, isim: oyuncuAdi }));
 }
 
-function oyuncuDurumunuDinle() {
-    // Odadaki Durumu Dinle (Başladı mı, Bitti mi?)
-    Veritabani.dinle(`odalar/${odayaAitKod}/durum`, durum => {
-        if (durum === "basladi") {
-            $("#oyuncu-bekleme-ekrani").addClass("d-none");
-            $("#quiz-ekrani").removeClass("d-none");
-        } else if (durum === "bitti") {
-            oyunuBitirveGoster();
-        }
-    });
-
-    // Soruları Oku
-    Veritabani.oku(`odalar/${odayaAitKod}/sorular`).then(sorular => {
-        soruHavuzu = sorular || [];
-        
-        // Aktif Soru Değişirse Ekrana Çiz
-        Veritabani.dinle(`odalar/${odayaAitKod}/aktifSoruIndex`, index => {
-            if (index === null) return;
-            suAnkiSoruSirasi = index;
-            
-            Veritabani.oku(`odalar/${odayaAitKod}/zamanDamgasi`).then(zaman => {
-                soruBaslamaZamani = zaman || Date.now();
-                oyuncuSoruyuCiz(index);
-            });
-        });
-    });
-
-    // Kendi Puanını Dinle
-    Veritabani.dinle(`odalar/${odayaAitKod}/oyuncular/${oyuncuID}/puan`, puan => {
-        toplamPuanim = puan || 0;
-        $("#puan-gosterge").text(`Puan: ${toplamPuanim}`);
-    });
+function oyuncuHostDurumunuYorumla(veri) {
+    if (veri.durum === "bekliyor") {
+        $("#oyuncu-bekleme-ekrani").removeClass("d-none");
+        $("#quiz-ekrani").addClass("d-none");
+    } 
+    else if (veri.durum === "bitti") {
+        oyunuBitirveGoster();
+    }
+    else if (veri.durum === "soru") {
+        $("#oyuncu-bekleme-ekrani").addClass("d-none");
+        $("#quiz-ekrani").removeClass("d-none");
+        oyuncuSoruyuCiz(veri);
+    }
 }
 
-function oyuncuSoruyuCiz(index) {
-    let soruBilgisi = soruHavuzu[index];
-    if (!soruBilgisi) return;
+function oyuncuSoruyuCiz(soruVerisi) {
+    suAnkiSoruSirasi = soruVerisi.soruIndex;
 
     if (canSayisi <= 0) {
         $("#soru-metni").html("<h3 class='text-danger'>Canınız bitti! Host ekranını izleyin. 💀</h3>");
@@ -403,57 +289,55 @@ function oyuncuSoruyuCiz(index) {
         return;
     }
 
-    $("#soru-sayaci-yazi").text(`Soru ${index + 1}/${soruHavuzu.length}`);
-    $("#quiz-progress-bar").css("width", ((index) / soruHavuzu.length * 100) + "%");
+    $("#soru-sayaci-yazi").text(`Soru ${suAnkiSoruSirasi + 1}/${soruVerisi.toplamSoru}`);
+    $("#quiz-progress-bar").css("width", (suAnkiSoruSirasi / soruVerisi.toplamSoru * 100) + "%");
 
-    let gSoru = $('<div>').text(soruBilgisi.soru).html();
-    $("#soru-metni").html(`<span class="badge bg-secondary me-2">${soruBilgisi.zorluk}</span> ${gSoru}`);
+    $("#soru-metni").html(`<span class="badge bg-secondary me-2">${soruVerisi.soruObjesi.zorluk}</span> ${$('<div>').text(soruVerisi.soruObjesi.soru).html()}`);
     
     let alan = $("#secenekler-alani");
     alan.empty();
 
-    // Şıkları Karıştır
-    let karisik = soruBilgisi.secenekler.map((m, i) => { return { metin: m, index: i }; });
+    let karisik = soruVerisi.soruObjesi.secenekler.map((m, i) => { return { metin: m, index: i }; });
     karisik.sort(() => Math.random() - 0.5);
 
     karisik.forEach(obj => {
-        let gSik = $('<div>').text(obj.metin).html();
-        let btn = $(`<button class="secenek-btn w-100">${gSik}</button>`);
-        btn.click(function() { oyuncuCevapVer(obj.index, this); });
+        let btn = $(`<button class="secenek-btn w-100">${$('<div>').text(obj.metin).html()}</button>`);
+        btn.click(function() { oyuncuCevapVer(obj.index, this, soruVerisi); });
         alan.append(btn);
     });
 
-    // Sayacı Başlat
-    kalanSure = 20;
+    // Zamanlayıcı
     clearInterval(zamanSayaci);
-    $("#sayac-metni").text(kalanSure);
     
-    zamanSayaci = setInterval(() => {
-        kalanSure--;
-        $("#sayac-metni").text(kalanSure);
+    let guncelZamanHesapla = () => {
+        let kalanMs = soruVerisi.bitisZamani - Date.now();
+        kalanSure = Math.ceil(kalanMs / 1000);
+        
         if (kalanSure <= 0) {
+            kalanSure = 0;
             clearInterval(zamanSayaci);
             $(".secenek-btn").prop("disabled", true);
             canGitti();
             alan.prepend('<div class="alert alert-danger fw-bold text-center">Süre Bitti!</div>');
             oyuncuCevabiGonder(-1, false, 0); 
         }
-    }, 1000);
+        $("#sayac-metni").text(kalanSure);
+    };
+    
+    guncelZamanHesapla();
+    zamanSayaci = setInterval(guncelZamanHesapla, 1000);
 }
 
-function oyuncuCevapVer(secilenIndeks, butonHTML) {
+function oyuncuCevapVer(secilenIndeks, butonHTML, soruVerisi) {
     clearInterval(zamanSayaci);
     $(".secenek-btn").prop("disabled", true);
     
-    let soruBilgisi = soruHavuzu[suAnkiSoruSirasi];
-    let dogruMu = (secilenIndeks === soruBilgisi.dogruCevap);
-    
-    let gecenSaniye = Math.floor((Date.now() - soruBaslamaZamani) / 1000);
+    let dogruMu = (secilenIndeks === soruVerisi.soruObjesi.dogruCevap);
     let kazanilanPuan = 0;
 
     if (dogruMu) {
         $(butonHTML).addClass("dogru").append(' <span class="float-end">✅ 😎</span>');
-        kazanilanPuan = Math.max(10, 100 - (gecenSaniye * 5)); // Hız Bonusu
+        kazanilanPuan = Math.max(10, kalanSure * 5); // 20 saniyede max 100
     } else {
         $(butonHTML).addClass("yanlis").append(' <span class="float-end">❌</span>');
         canGitti();
@@ -464,18 +348,20 @@ function oyuncuCevapVer(secilenIndeks, butonHTML) {
 }
 
 function oyuncuCevabiGonder(cevapIndeks, dogruMu, puan) {
-    // 1. Cevabı Veritabanına Yaz
-    Veritabani.yaz(`odalar/${odayaAitKod}/cevaplar/${suAnkiSoruSirasi}/${oyuncuID}`, {
+    mqttClient.publish(`GTonkalQuiz/${odaKodu}/OyuncuCevap`, JSON.stringify({
+        id: oyuncuID,
         cevap: cevapIndeks,
         puanAldi: puan
-    });
+    }));
+}
 
-    // 2. Kazanılan Puanı Oyuncuya Ekle
-    if (puan > 0) {
-        Veritabani.oku(`odalar/${odayaAitKod}/oyuncular/${oyuncuID}/puan`).then(eskiPuan => {
-            Veritabani.yaz(`odalar/${odayaAitKod}/oyuncular/${oyuncuID}/puan`, (eskiPuan || 0) + puan);
-        });
-    }
+
+// ==========================================
+// ORTAK FONKSİYONLAR
+// ==========================================
+function mqttYayinla(topic, dataObj) {
+    // Retain true: Son girenler statüyü anında okuyabilsin diye
+    mqttClient.publish(topic, JSON.stringify(dataObj), { retain: true });
 }
 
 function canGitti() {
@@ -503,7 +389,7 @@ function oyunuBitirveGoster() {
         if (canSayisi <= 0) {
             $("#rozet-ikon").text("💀");
             $("#rozet-isim").text("Elenerek Bitti");
-        } else if (toplamPuanim > 800) {
+        } else if (toplamPuanim > 500) {
             $("#rozet-ikon").text("👑");
             $("#rozet-isim").text("JS Ninja");
         } else {

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -30,9 +30,6 @@
             </button>
             <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
                 <ul class="navbar-nav align-items-center">
-                    <li class="nav-item me-2">
-                        <button id="btn-admin-panel" class="btn btn-outline-light btn-sm"><i class="bi bi-gear-fill me-1"></i>Soru Ekle</button>
-                    </li>
                     <li class="nav-item">
                         <button id="btn-dark-mode" class="btn btn-outline-warning btn-sm"><i class="bi bi-moon-fill"></i> Dark Mode</button>
                     </li>
@@ -193,7 +190,6 @@
 
     <!-- SONUÇ MODALI -->
     <div class="modal fade" id="sonucModal" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
-        <!-- ... (Aynı modal HTML) ... -->
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content border-0 shadow-lg quiz-modal">
                 <div class="modal-header bg-primary text-white border-0">
@@ -208,57 +204,6 @@
                 </div>
                 <div class="modal-footer justify-content-center border-0 pb-4">
                     <button type="button" class="btn btn-primary btn-lg px-5 fw-bold shadow" id="btn-modal-yeniden">Ana Ekrana Dön</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- FAKE ADMIN PANELI MODALI -->
-    <div class="modal fade" id="adminModal" tabindex="-1" aria-hidden="true">
-        <!-- ... (Aynı admin modal) ... -->
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title"><i class="bi bi-gear"></i> Özel Soru Ekleme (Yerel)</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Soru Metni:</label>
-                        <input type="text" id="admin-soru" class="form-control" placeholder="Soru metnini yazın...">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Şık 1 (Doğru Cevap):</label>
-                        <input type="text" id="admin-sik1" class="form-control border-success">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Diğer Şıklar:</label>
-                        <input type="text" id="admin-sik2" class="form-control mb-2">
-                        <input type="text" id="admin-sik3" class="form-control mb-2">
-                        <input type="text" id="admin-sik4" class="form-control mb-2">
-                    </div>
-                    <div class="row">
-                        <div class="col-6">
-                            <label class="form-label fw-bold">Kategori:</label>
-                            <select id="admin-kategori" class="form-select">
-                                <option value="HTML">HTML</option>
-                                <option value="CSS">CSS</option>
-                                <option value="JS">JavaScript</option>
-                            </select>
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label fw-bold">Zorluk:</label>
-                            <select id="admin-zorluk" class="form-select">
-                                <option value="Kolay">Kolay</option>
-                                <option value="Orta">Orta</option>
-                                <option value="Zor">Zor</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
-                    <button type="button" class="btn btn-success" id="btn-admin-kaydet"><i class="bi bi-save"></i> Sisteme Ekle</button>
                 </div>
             </div>
         </div>
@@ -280,10 +225,8 @@
     <!-- QRCode.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
-    <!-- Firebase App (Compat) -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <!-- Firebase Realtime Database (Compat) -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <!-- MQTT.js (Firebase yerine tamamen ücretsiz ve key istemeyen Canlı Sunucu) -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
     <!-- JS -->
     <script src="script.js"></script>
