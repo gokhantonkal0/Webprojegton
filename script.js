@@ -1,310 +1,226 @@
 // ==========================================
-// FIREBASE & LOCAL MOCK AYARLARI
+// AYARLAR (Gerçek sunucu için FIREBASE_KULLAN = true yapın)
 // ==========================================
-const USE_FIREBASE = false; // LOKAL TEST İÇİN FALSE YAPIN! (Gerçek sunucuya geçince true yaparsınız)
+const FIREBASE_KULLAN = false;
 
-const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+const firebaseAyarlari = {
+    apiKey: "BURAYA_API_KEY_GELECEK",
+    authDomain: "PROJE_ID.firebaseapp.com",
+    databaseURL: "https://PROJE_ID-default-rtdb.firebaseio.com",
+    projectId: "PROJE_ID",
+    storageBucket: "PROJE_ID.appspot.com",
+    messagingSenderId: "SENDER_ID",
+    appId: "APP_ID"
 };
 
-let db;
+// ==========================================
+// BASİTLEŞTİRİLMİŞ VERİTABANI YÖNETİCİSİ
+// (Hem Firebase hem LocalStorage destekler)
+// ==========================================
+const Veritabani = {
+    _lokalVeri: JSON.parse(localStorage.getItem('kahootDB')) || {},
+    _dinleyiciler: {},
 
-if (USE_FIREBASE) {
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
+    baslat() {
+        if (FIREBASE_KULLAN) {
+            if (!firebase.apps.length) firebase.initializeApp(firebaseAyarlari);
+            this.db = firebase.database();
+        } else {
+            console.warn("Lokal Test Modu: Veriler sadece tarayıcıda tutulur.");
+            // FILE:// protokolünde sekme arası veri aktarımı için Polling (Sürekli kontrol)
+            setInterval(() => {
+                let yeniVeriStr = localStorage.getItem('kahootDB');
+                let yeniVeri = yeniVeriStr ? JSON.parse(yeniVeriStr) : {};
+                if (JSON.stringify(this._lokalVeri) !== JSON.stringify(yeniVeri)) {
+                    this._lokalVeri = yeniVeri;
+                    this._tetikleHerSey();
+                }
+            }, 500); // Saniyede 2 kez kontrol et
+        }
+    },
+
+    yaz(yol, deger) {
+        if (FIREBASE_KULLAN) {
+            return this.db.ref(yol).set(deger);
+        } else {
+            this._yolAyarla(yol, deger);
+            this._lokalKaydet();
+            return Promise.resolve();
+        }
+    },
+
+    guncelle(yol, obje) {
+        if (FIREBASE_KULLAN) {
+            return this.db.ref(yol).update(obje);
+        } else {
+            let mevcut = this._yolGetir(yol) || {};
+            for (let anahtar in obje) {
+                mevcut[anahtar] = obje[anahtar];
+            }
+            this._yolAyarla(yol, mevcut);
+            this._lokalKaydet();
+            return Promise.resolve();
+        }
+    },
+
+    dinle(yol, callback) {
+        if (FIREBASE_KULLAN) {
+            this.db.ref(yol).on('value', snap => callback(snap.val()));
+        } else {
+            if (!this._dinleyiciler[yol]) this._dinleyiciler[yol] = [];
+            this._dinleyiciler[yol].push(callback);
+            callback(this._yolGetir(yol));
+        }
+    },
+
+    oku(yol) {
+        if (FIREBASE_KULLAN) {
+            return this.db.ref(yol).once('value').then(s => s.val());
+        } else {
+            return Promise.resolve(this._yolGetir(yol));
+        }
+    },
+
+    // --- LOKAL YARDIMCILAR ---
+    _lokalKaydet() {
+        localStorage.setItem('kahootDB', JSON.stringify(this._lokalVeri));
+    },
+    _yolAyarla(yol, deger) {
+        let parcalar = yol.split('/');
+        let aktif = this._lokalVeri;
+        for (let i = 0; i < parcalar.length - 1; i++) {
+            if (!aktif[parcalar[i]]) aktif[parcalar[i]] = {};
+            aktif = aktif[parcalar[i]];
+        }
+        aktif[parcalar[parcalar.length - 1]] = deger;
+    },
+    _yolGetir(yol) {
+        let parcalar = yol.split('/');
+        let aktif = this._lokalVeri;
+        for (let p of parcalar) {
+            if (aktif === undefined || aktif === null) return null;
+            aktif = aktif[p];
+        }
+        return aktif;
+    },
+    _tetikleHerSey() {
+        for (let yol in this._dinleyiciler) {
+            let deger = this._yolGetir(yol);
+            this._dinleyiciler[yol].forEach(cb => cb(deger));
+        }
     }
-    db = firebase.database();
-} else {
-    console.warn("UYARI: Local Test Modu Aktif. Veriler sadece bu tarayıcıda sekmeler arası senkronize edilir.");
-    const LocalDB = {
-        data: JSON.parse(localStorage.getItem('quizMockDB')) || {},
-        listeners: {},
-        _save() { localStorage.setItem('quizMockDB', JSON.stringify(this.data)); },
-        _getRef(path) {
-            let keys = path.split('/');
-            let current = this.data;
-            for(let i=0; i<keys.length-1; i++) {
-                if(current[keys[i]] === undefined) current[keys[i]] = {};
-                current = current[keys[i]];
-            }
-            return { parent: current, key: keys[keys.length-1] };
-        },
-        _getValue(path) {
-            let keys = path.split('/');
-            let current = this.data;
-            for(let k of keys) {
-                if(current === undefined || current === null) return null;
-                current = current[k];
-            }
-            return current;
-        },
-        ref(path) {
-            return {
-                set: (val) => {
-                    let r = LocalDB._getRef(path);
-                    r.parent[r.key] = val;
-                    LocalDB._save(); LocalDB._trigger(path);
-                    return Promise.resolve();
-                },
-                update: (obj) => {
-                    let r = LocalDB._getRef(path);
-                    if(typeof r.parent[r.key] !== 'object') r.parent[r.key] = {};
-                    for(let k in obj) {
-                        r.parent[r.key][k] = obj[k];
-                        LocalDB._trigger(path + '/' + k);
-                    }
-                    LocalDB._save(); LocalDB._trigger(path);
-                    return Promise.resolve();
-                },
-                on: (event, callback) => {
-                    if(!LocalDB.listeners[path]) LocalDB.listeners[path] = [];
-                    LocalDB.listeners[path].push(callback);
-                    let v = LocalDB._getValue(path);
-                    callback({ val: () => v, exists: () => v !== null && v !== undefined });
-                },
-                once: (event) => {
-                    let v = LocalDB._getValue(path);
-                    return Promise.resolve({ val: () => v, exists: () => v !== null && v !== undefined });
-                }
-            };
-        },
-        _trigger(path) {
-            if(LocalDB.listeners[path]) {
-                let v = LocalDB._getValue(path);
-                LocalDB.listeners[path].forEach(cb => cb({ val: () => v, exists: () => v !== null }));
-            }
-            for(let key in LocalDB.listeners) {
-                if (path.startsWith(key) && path !== key) {
-                    let v = LocalDB._getValue(key);
-                    LocalDB.listeners[key].forEach(cb => cb({ val: () => v, exists: () => v !== null }));
-                }
-            }
-        }
-    };
-
-    window.addEventListener('storage', (e) => {
-        if(e.key === 'quizMockDB') {
-            LocalDB.data = JSON.parse(e.newValue) || {};
-            for(let path in LocalDB.listeners) {
-                let v = LocalDB._getValue(path);
-                LocalDB.listeners[path].forEach(cb => cb({ val: () => v, exists: () => v !== null }));
-            }
-        }
-    });
-
-    db = LocalDB;
-    // Sahte ServerValue
-    window.firebase = { database: { ServerValue: { TIMESTAMP: Date.now() } } };
-}
+};
 
 // ==========================================
-// SORU HAVUZU (Min 15 Soru)
+// 15 SORULUK HAVUZ (Türkçe Değişkenler)
 // ==========================================
-const anaSorular = [
+let soruHavuzu = [
     { soru: "HTML'in açılımı nedir?", secenekler: ["Hyper Text Markup Language", "High Text Machine Language", "Hyper Tabular Markup Language", "Hiçbiri"], dogruCevap: 0, kategori: "HTML", zorluk: "Kolay" },
     { soru: "Web sayfasına resim eklemek için hangi HTML etiketi kullanılır?", secenekler: ["<image>", "<img>", "<pic>", "<src>"], dogruCevap: 1, kategori: "HTML", zorluk: "Kolay" },
     { soru: "Bir link (bağlantı) oluşturmak için hangi HTML etiketi kullanılır?", secenekler: ["<link>", "<a>", "<href>", "<url>"], dogruCevap: 1, kategori: "HTML", zorluk: "Kolay" },
-    
     { soru: "CSS'de arka plan rengini değiştirmek için hangi özellik kullanılır?", secenekler: ["color", "bgcolor", "background-color", "background-image"], dogruCevap: 2, kategori: "CSS", zorluk: "Kolay" },
     { soru: "CSS'de 'margin' özelliği ne işe yarar?", secenekler: ["İç boşluk ayarlar", "Dış boşluk ayarlar", "Kenarlık belirler", "Genişlik ayarlar"], dogruCevap: 1, kategori: "CSS", zorluk: "Orta" },
     { soru: "Hangi CSS özelliği metnin altını çizer?", secenekler: ["text-decoration: underline;", "font-style: italic;", "text-transform: capitalize;", "text-decoration: line-through;"], dogruCevap: 0, kategori: "CSS", zorluk: "Kolay" },
-    
     { soru: "JavaScript'te güncel olarak değişken tanımlamak için aşağıdakilerden hangisi kullanılır?", secenekler: ["variable", "let", "v", "dim"], dogruCevap: 1, kategori: "JS", zorluk: "Kolay" },
     { soru: "Konsola mesaj yazdırmak için hangi JavaScript komutu kullanılır?", secenekler: ["console.log()", "print()", "echo()", "console.print()"], dogruCevap: 0, kategori: "JS", zorluk: "Kolay" },
     { soru: "Bir HTML elementini ID'sine göre seçmek için hangi standart JS metodu kullanılır?", secenekler: ["getElementByName()", "querySelector('#id')", "getElementById()", "İkisi de (2 ve 3)"], dogruCevap: 3, kategori: "JS", zorluk: "Orta" },
-    
     { soru: "Bootstrap 5 grid sisteminde bir satır en fazla kaç sütuna (col) ayrılır?", secenekler: ["10", "12", "14", "16"], dogruCevap: 1, kategori: "Bootstrap", zorluk: "Kolay" },
     { soru: "Bootstrap'te bir butonu mavi (primary) renk yapmak için hangi class kullanılır?", secenekler: ["btn-blue", "btn-info", "btn-primary", "btn-success"], dogruCevap: 2, kategori: "Bootstrap", zorluk: "Kolay" },
     { soru: "Bootstrap'te içeriği yatayda ortalamak için hangi class kullanılır?", secenekler: ["align-center", "text-center", "center-block", "justify-center"], dogruCevap: 1, kategori: "Bootstrap", zorluk: "Orta" },
-
     { soru: "jQuery'de bir HTML elementini seçmek için genellikle hangi işaret kullanılır?", secenekler: ["$", "#", "@", "&"], dogruCevap: 0, kategori: "jQuery", zorluk: "Kolay" },
     { soru: "jQuery ile bir elementi gizlemek için hangi metot kullanılır?", secenekler: ["hide()", "displayNone()", "invisible()", "remove()"], dogruCevap: 0, kategori: "jQuery", zorluk: "Orta" },
     { soru: "jQuery'de tıklama (click) olayını yakalamak için hangi metot kullanılır?", secenekler: ["onclick()", "onClick()", "click()", "bindClick()"], dogruCevap: 2, kategori: "jQuery", zorluk: "Kolay" }
 ];
 
-// ==========================================
-// UYGULAMA DEĞİŞKENLERİ
-// ==========================================
-let tumSorular = [];
-let aktifSorular = [];
+// OYUN DURUMU
+let odayaAitKod = "";
+let benHostum = false;
+let oyuncuID = "";
+let oyuncuAdi = "";
+let suAnkiSoruSirasi = 0;
+let soruBaslamaZamani = 0;
+let zamanSayaci;
+let kalanSure = 20;
+let toplamPuanim = 0;
+let canSayisi = 3;
 
-// Oyun Durumu
-let roomCode = "";
-let isHost = false;
-let playerId = "";
-let playerName = "";
-
-// Sayaç & Puan
-let currentQuestionIndex = 0;
-let questionStartTime = 0;
-let sayac;
-let sureDegeri = 20; // 20 saniye
-let oyuncuPuani = 0;
-let can = 3;
-
-// Sesler
-const sesDogru = new Audio('data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq');
-const sesYanlis = new Audio('data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq');
-
-// ==========================================
-// BAŞLANGIÇ & UI YÖNETİMİ
-// ==========================================
-$(window).on('load', function() {
-    setTimeout(() => {
-        $("#loading-ekrani").css("opacity", "0");
-        setTimeout(() => $("#loading-ekrani").remove(), 500);
-    }, 600);
-});
-
+// UI HAZIRLIK
 $(document).ready(function() {
-    tumSorulariHazirla();
-    gununSorusunuBelirle();
+    Veritabani.baslat();
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomFromUrl = urlParams.get('room');
-    if(roomFromUrl) {
+    // Linkten gelen oda kodu varsa
+    const urlParametreleri = new URLSearchParams(window.location.search);
+    const linktenGelenOda = urlParametreleri.get('room');
+    if(linktenGelenOda) {
         $("#rol-secim-ekrani").addClass("d-none");
         $("#oyuncu-giris-ekrani").removeClass("d-none");
-        $("#oyuncu-oda-kodu").val(roomFromUrl.toUpperCase());
+        $("#oyuncu-oda-kodu").val(linktenGelenOda.toUpperCase());
     }
 
+    // Buton Tıklamaları
+    $("#btn-host-sec").click(() => { $("#rol-secim-ekrani").addClass("d-none"); hostOdasiniKur(); });
+    $("#btn-oyuncu-sec").click(() => { $("#rol-secim-ekrani").addClass("d-none"); $("#oyuncu-giris-ekrani").removeClass("d-none"); });
+    $("#btn-oyuncu-katil").click(() => oyuncuOdayaGir());
+    $("#btn-host-baslat").click(() => hostOyunuBaslat());
+    $("#btn-host-sonraki").click(() => hostSonrakiSoru());
+    $("#btn-host-bitir").click(() => Veritabani.yaz(`odalar/${odayaAitKod}/durum`, "bitti"));
+    
+    // Dark Mode
     $("#btn-dark-mode").click(function() {
         $("body").toggleClass("dark-mode");
-        let isDark = $("body").hasClass("dark-mode");
-        $(this).html(isDark ? '<i class="bi bi-sun-fill"></i> Light Mode' : '<i class="bi bi-moon-fill"></i> Dark Mode');
-        $(this).toggleClass("btn-outline-warning btn-outline-light");
-    });
-
-    $("#nav-brand-btn").click(function(e) {
-        e.preventDefault();
-        window.location.href = window.location.pathname; 
-    });
-
-    $("#btn-host-sec").click(function() {
-        $("#rol-secim-ekrani").addClass("d-none");
-        hostOdaKur();
-    });
-
-    $("#btn-oyuncu-sec").click(function() {
-        $("#rol-secim-ekrani").addClass("d-none");
-        $("#oyuncu-giris-ekrani").removeClass("d-none");
-    });
-
-    $("#btn-oyuncu-katil").click(function() {
-        let code = $("#oyuncu-oda-kodu").val().trim().toUpperCase();
-        let name = $("#oyuncu-ismi").val().trim();
-        
-        if(code.length !== 6 || name === "") {
-            alert("Lütfen 6 haneli oda kodunu ve isminizi girin.");
-            return;
-        }
-        oyuncuOdayaKatil(code, name);
-    });
-
-    $("#btn-host-baslat").click(function() {
-        hostSinaviBaslat();
-    });
-
-    $("#btn-host-sonraki").click(function() {
-        hostSonrakiSoru();
-    });
-
-    $("#btn-host-bitir").click(function() {
-        hostSinaviBitir();
-    });
-
-    $("#btn-modal-yeniden").click(function() {
-        window.location.href = window.location.pathname;
-    });
-
-    $("#btn-admin-panel").click(function() {
-        $("#adminModal").modal('show');
-    });
-
-    $("#btn-admin-kaydet").click(function() {
-        let s = $("#admin-soru").val().trim();
-        let c1 = $("#admin-sik1").val().trim();
-        let c2 = $("#admin-sik2").val().trim();
-        let c3 = $("#admin-sik3").val().trim();
-        let c4 = $("#admin-sik4").val().trim();
-        if(s===""||c1===""||c2===""||c3===""||c4===""){alert("Doldurun!");return;}
-        
-        let custom = JSON.parse(localStorage.getItem("customSorular")) || [];
-        custom.push({ soru: s, secenekler: [c1, c2, c3, c4], dogruCevap: 0, kategori: "Özel", zorluk: "Orta" });
-        localStorage.setItem("customSorular", JSON.stringify(custom));
-        alert("Soru eklendi!"); $("#adminModal").modal('hide'); tumSorulariHazirla();
     });
 });
 
-function tumSorulariHazirla() {
-    let custom = JSON.parse(localStorage.getItem("customSorular")) || [];
-    let birlesik = [...anaSorular, ...custom];
-    tumSorular = birlesik.filter(s => s && typeof s.soru === 'string' && s.soru.trim() !== "");
-}
-
-function gununSorusunuBelirle() {
-    if(tumSorular.length === 0) return;
-    let bugun = new Date();
-    let index = (bugun.getFullYear() + bugun.getMonth() + bugun.getDate()) % tumSorular.length;
-    let tGunun = $('<div>').text(tumSorular[index].soru).html();
-    $("#gunun-sorusu-metni").html(`<strong>[${tumSorular[index].kategori} - ${tumSorular[index].zorluk}]</strong> ${tGunun}`);
-}
-
 // ==========================================
-// HOST (SUNUCU) MANTIĞI
+// 1. HOST (SUNUCU) İŞLEMLERİ
 // ==========================================
-function hostOdaKur() {
-    isHost = true;
-    roomCode = Math.floor(100000 + Math.random() * 900000).toString(); 
+function hostOdasiniKur() {
+    benHostum = true;
+    odayaAitKod = Math.floor(100000 + Math.random() * 900000).toString(); // 6 haneli
     
-    let havuz = [...tumSorular];
-    havuz.sort(() => Math.random() - 0.5);
-    aktifSorular = havuz.splice(0, 15);
+    // Soruları karıştır ve odaya yaz
+    soruHavuzu.sort(() => Math.random() - 0.5);
 
-    db.ref(`rooms/${roomCode}`).set({
-        status: "waiting",
-        currentQuestion: 0,
-        questions: aktifSorular,
-        players: {},
-        answers: {}
-    }).then(() => {
+    let baslangicVerisi = {
+        durum: "bekliyor",
+        aktifSoruIndex: 0,
+        sorular: soruHavuzu,
+        oyuncular: {},
+        cevaplar: {}
+    };
+
+    Veritabani.yaz(`odalar/${odayaAitKod}`, baslangicVerisi).then(() => {
         $("#host-lobi-ekrani").removeClass("d-none");
-        $("#host-oda-kodu").text(roomCode);
+        $("#host-oda-kodu").text(odayaAitKod);
         
-        let joinUrl = window.location.href.split('?')[0] + "?room=" + roomCode;
-        $("#host-join-link").attr("href", joinUrl).text(joinUrl);
-        new QRCode(document.getElementById("qrcode"), {
-            text: joinUrl,
-            width: 200,
-            height: 200,
-        });
+        let katilmaLinki = window.location.href.split('?')[0] + "?room=" + odayaAitKod;
+        $("#host-join-link").attr("href", katilmaLinki).text(katilmaLinki);
+        
+        // QR Kod
+        new QRCode(document.getElementById("qrcode"), { text: katilmaLinki, width: 200, height: 200 });
 
-        db.ref(`rooms/${roomCode}/players`).on('value', snapshot => {
-            let p = snapshot.val();
+        // Oyuncuları Canlı Dinle
+        Veritabani.dinle(`odalar/${odayaAitKod}/oyuncular`, (oyuncular) => {
             let tablo = $("#liderlik-tablosu");
             tablo.empty();
-            let pCount = 0;
-            if(p) {
-                let playerArray = Object.keys(p).map(k => p[k]);
-                playerArray.sort((a,b) => b.score - a.score);
+            let kisiSayisi = 0;
+
+            if (oyuncular) {
+                // Objeyi diziye çevir ve puana göre sırala
+                let liste = Object.keys(oyuncular).map(k => oyuncular[k]);
+                liste.sort((a, b) => b.puan - a.puan);
                 
-                playerArray.forEach((oy, index) => {
-                    pCount++;
-                    let siralamClass = index === 0 ? "top-1" : (index === 1 ? "top-2" : (index === 2 ? "top-3" : ""));
+                liste.forEach((kisi, sira) => {
+                    kisiSayisi++;
+                    let madalyaClass = sira === 0 ? "top-1" : (sira === 1 ? "top-2" : (sira === 2 ? "top-3" : ""));
                     tablo.append(`
-                        <li class="list-group-item liderlik-item ${siralamClass}">
+                        <li class="list-group-item liderlik-item ${madalyaClass}">
                             <div class="d-flex align-items-center">
-                                <span class="liderlik-sira shadow-sm">${index + 1}</span>
-                                <span class="text-truncate fw-bold">${oy.name}</span>
+                                <span class="liderlik-sira shadow-sm">${sira + 1}</span>
+                                <span class="text-truncate fw-bold">${kisi.isim}</span>
                             </div>
                             <div class="text-end">
-                                <span class="badge bg-primary rounded-pill px-2 py-1">${oy.score} P</span>
+                                <span class="badge bg-primary rounded-pill px-2 py-1">${kisi.puan} Puan</span>
                             </div>
                         </li>
                     `);
@@ -312,296 +228,270 @@ function hostOdaKur() {
             } else {
                 tablo.append('<li class="list-group-item text-muted text-center py-4">Bekleniyor...</li>');
             }
-            $("#host-oyuncu-sayisi").text(pCount);
-            if(pCount > 0) $("#btn-host-baslat").prop("disabled", false);
-            else $("#btn-host-baslat").prop("disabled", true);
-            $("#host-toplam-oyuncu").text(pCount);
+            
+            $("#host-oyuncu-sayisi").text(kisiSayisi);
+            $("#host-toplam-oyuncu").text(kisiSayisi);
+            $("#btn-host-baslat").prop("disabled", kisiSayisi === 0);
         });
-
-    }).catch(err => {
-        alert("Bağlantı hatası: " + err.message);
     });
 }
 
-function hostSinaviBaslat() {
-    db.ref(`rooms/${roomCode}`).update({
-        status: "started",
-        currentQuestion: 0,
-        questionStartTime: window.firebase.database.ServerValue.TIMESTAMP
+function hostOyunuBaslat() {
+    Veritabani.guncelle(`odalar/${odayaAitKod}`, {
+        durum: "basladi",
+        aktifSoruIndex: 0,
+        zamanDamgasi: Date.now()
     });
     
     $("#host-lobi-ekrani").addClass("d-none");
     $("#quiz-ekrani").removeClass("d-none");
     $("#host-kontrol-alani").removeClass("d-none");
     
-    hostSoruyuDinle();
+    hostSoruyuYonet();
 }
 
 function hostSonrakiSoru() {
-    currentQuestionIndex++;
-    if(currentQuestionIndex >= aktifSorular.length) {
-        hostSinaviBitir();
+    suAnkiSoruSirasi++;
+    if (suAnkiSoruSirasi >= soruHavuzu.length) {
+        Veritabani.yaz(`odalar/${odayaAitKod}/durum`, "bitti");
         return;
     }
-    
-    db.ref(`rooms/${roomCode}`).update({
-        currentQuestion: currentQuestionIndex,
-        questionStartTime: window.firebase.database.ServerValue.TIMESTAMP
+    Veritabani.guncelle(`odalar/${odayaAitKod}`, {
+        aktifSoruIndex: suAnkiSoruSirasi,
+        zamanDamgasi: Date.now()
     });
 }
 
-function hostSinaviBitir() {
-    db.ref(`rooms/${roomCode}`).update({
-        status: "finished"
-    });
-}
+function hostSoruyuYonet() {
+    // Aktif Soru Değişimini Dinle
+    Veritabani.dinle(`odalar/${odayaAitKod}/aktifSoruIndex`, (index) => {
+        if (index === null) return;
+        suAnkiSoruSirasi = index;
+        let soruBilgisi = soruHavuzu[index];
 
-function hostSoruyuDinle() {
-    db.ref(`rooms/${roomCode}/currentQuestion`).on('value', snap => {
-        let qIdx = snap.val();
-        if(qIdx === null) return;
-        currentQuestionIndex = qIdx;
+        $("#soru-sayaci-yazi").text(`Soru ${index + 1}/${soruHavuzu.length} (Host Ekranı)`);
         
-        let soruNesnesi = aktifSorular[qIdx];
-        if(!soruNesnesi) return;
-
-        $("#soru-sayaci-yazi").text(`Soru ${qIdx + 1}/${aktifSorular.length} (Host Ekranı)`);
+        let soruEkrani = $('<div>').text(soruBilgisi.soru).html(); // HTML Injection koruması
+        $("#soru-metni").html(`<span class="badge bg-secondary me-2">${soruBilgisi.zorluk}</span> ${soruEkrani}`);
         
-        let tSoru = $('<div>').text(soruNesnesi.soru).html();
-        $("#soru-metni").html(`<span class="badge bg-secondary me-2">${soruNesnesi.zorluk}</span> ${tSoru}`);
+        let butonAlani = $("#secenekler-alani");
+        butonAlani.empty();
         
-        let seceneklerAlani = $("#secenekler-alani");
-        seceneklerAlani.empty();
-        
-        soruNesnesi.secenekler.forEach((metin) => {
-            let tSik = $('<div>').text(metin).html();
-            seceneklerAlani.append(`<button class="secenek-btn w-100 disabled text-center">${tSik}</button>`);
+        soruBilgisi.secenekler.forEach(metin => {
+            let sikMetni = $('<div>').text(metin).html();
+            butonAlani.append(`<button class="secenek-btn w-100 disabled text-center">${sikMetni}</button>`);
         });
 
-        sureDegeri = 20;
-        clearInterval(sayac);
-        $("#sayac-metni").text(sureDegeri);
-        sayac = setInterval(() => {
-            sureDegeri--;
-            $("#sayac-metni").text(sureDegeri);
-            if(sureDegeri <= 0) clearInterval(sayac);
+        // Sayacı Sıfırla
+        kalanSure = 20;
+        clearInterval(zamanSayaci);
+        $("#sayac-metni").text(kalanSure);
+        zamanSayaci = setInterval(() => {
+            kalanSure--;
+            $("#sayac-metni").text(kalanSure);
+            if (kalanSure <= 0) clearInterval(zamanSayaci);
         }, 1000);
 
-        db.ref(`rooms/${roomCode}/answers/${qIdx}`).on('value', asnap => {
-            let ans = asnap.val();
-            let sayi = ans ? Object.keys(ans).length : 0;
+        // Bu soruya kaç kişi cevap verdi dinle
+        Veritabani.dinle(`odalar/${odayaAitKod}/cevaplar/${index}`, (cevaplar) => {
+            let sayi = cevaplar ? Object.keys(cevaplar).length : 0;
             $("#host-cevap-veren-sayisi").text(sayi);
         });
-        
-        if(qIdx === aktifSorular.length - 1) {
+
+        if (index === soruHavuzu.length - 1) {
             $("#btn-host-sonraki").addClass("d-none");
             $("#btn-host-bitir").removeClass("d-none");
         }
     });
 
-    db.ref(`rooms/${roomCode}/status`).on('value', snap => {
-        if(snap.val() === "finished") {
-            ortakSonucuGoster();
-        }
+    // Oyunun bitip bitmediğini dinle
+    Veritabani.dinle(`odalar/${odayaAitKod}/durum`, (durum) => {
+        if (durum === "bitti") oyunuBitirveGoster();
     });
 }
 
 // ==========================================
-// OYUNCU MANTIĞI
+// 2. OYUNCU İŞLEMLERİ
 // ==========================================
-function oyuncuOdayaKatil(code, name) {
-    roomCode = code;
-    playerName = name;
-    playerId = 'player_' + Math.random().toString(36).substr(2, 9);
+function oyuncuOdayaGir() {
+    odayaAitKod = $("#oyuncu-oda-kodu").val().trim().toUpperCase();
+    oyuncuAdi = $("#oyuncu-ismi").val().trim();
+    oyuncuID = 'oyuncu_' + Math.floor(Math.random() * 1000000); // Rastgele ID
     
-    db.ref(`rooms/${roomCode}/status`).once('value').then(snap => {
-        if(!snap.exists()) {
-            alert("Böyle bir oda bulunamadı!");
-            return;
-        }
-        if(snap.val() === "finished") {
-            alert("Bu sınav zaten bitmiş!");
-            return;
-        }
+    Veritabani.oku(`odalar/${odayaAitKod}`).then(oda => {
+        if (!oda) { alert("Oda bulunamadı!"); return; }
+        if (oda.durum === "bitti") { alert("Bu sınav bitmiş!"); return; }
         
-        db.ref(`rooms/${roomCode}/players/${playerId}`).set({
-            name: playerName,
-            score: 0,
-            joinedAt: window.firebase.database.ServerValue.TIMESTAMP,
-            answeredCurrentQuestion: false
+        // Oyuncuyu Odaya Kaydet
+        Veritabani.yaz(`odalar/${odayaAitKod}/oyuncular/${oyuncuID}`, {
+            isim: oyuncuAdi,
+            puan: 0
         }).then(() => {
             $("#oyuncu-giris-ekrani").addClass("d-none");
             
-            if(snap.val() === "waiting") {
+            if (oda.durum === "bekliyor") {
                 $("#oyuncu-bekleme-ekrani").removeClass("d-none");
             } else {
                 $("#quiz-ekrani").removeClass("d-none");
             }
 
-            oyuncuDurumDinle();
-
+            oyuncuDurumunuDinle();
         });
     });
 }
 
-function oyuncuDurumDinle() {
-    db.ref(`rooms/${roomCode}/status`).on('value', snap => {
-        let st = snap.val();
-        if(st === "started") {
+function oyuncuDurumunuDinle() {
+    // Odadaki Durumu Dinle (Başladı mı, Bitti mi?)
+    Veritabani.dinle(`odalar/${odayaAitKod}/durum`, durum => {
+        if (durum === "basladi") {
             $("#oyuncu-bekleme-ekrani").addClass("d-none");
             $("#quiz-ekrani").removeClass("d-none");
-        } else if (st === "finished") {
-            ortakSonucuGoster();
+        } else if (durum === "bitti") {
+            oyunuBitirveGoster();
         }
     });
 
-    db.ref(`rooms/${roomCode}/questions`).once('value').then(qSnap => {
-        aktifSorular = qSnap.val() || [];
+    // Soruları Oku
+    Veritabani.oku(`odalar/${odayaAitKod}/sorular`).then(sorular => {
+        soruHavuzu = sorular || [];
         
-        db.ref(`rooms/${roomCode}/currentQuestion`).on('value', snap => {
-            let qIdx = snap.val();
-            if(qIdx === null) return;
-            currentQuestionIndex = qIdx;
+        // Aktif Soru Değişirse Ekrana Çiz
+        Veritabani.dinle(`odalar/${odayaAitKod}/aktifSoruIndex`, index => {
+            if (index === null) return;
+            suAnkiSoruSirasi = index;
             
-            db.ref(`rooms/${roomCode}/questionStartTime`).once('value').then(tSnap => {
-                questionStartTime = tSnap.val() || Date.now();
-                oyuncuSoruyuGoster(qIdx);
+            Veritabani.oku(`odalar/${odayaAitKod}/zamanDamgasi`).then(zaman => {
+                soruBaslamaZamani = zaman || Date.now();
+                oyuncuSoruyuCiz(index);
             });
         });
     });
 
-    db.ref(`rooms/${roomCode}/players/${playerId}/score`).on('value', snap => {
-        oyuncuPuani = snap.val() || 0;
-        $("#puan-gosterge").text(`Puan: ${oyuncuPuani}`);
+    // Kendi Puanını Dinle
+    Veritabani.dinle(`odalar/${odayaAitKod}/oyuncular/${oyuncuID}/puan`, puan => {
+        toplamPuanim = puan || 0;
+        $("#puan-gosterge").text(`Puan: ${toplamPuanim}`);
     });
 }
 
-function oyuncuSoruyuGoster(qIdx) {
-    let soruNesnesi = aktifSorular[qIdx];
-    if(!soruNesnesi) return;
+function oyuncuSoruyuCiz(index) {
+    let soruBilgisi = soruHavuzu[index];
+    if (!soruBilgisi) return;
 
-    if(can <= 0) {
-        $("#soru-metni").html("<h3 class='text-danger'>Canınız bitti! Host ekranından maçı takip edin. 💀</h3>");
+    if (canSayisi <= 0) {
+        $("#soru-metni").html("<h3 class='text-danger'>Canınız bitti! Host ekranını izleyin. 💀</h3>");
         $("#secenekler-alani").empty();
         return;
     }
 
-    $("#soru-sayaci-yazi").text(`Soru ${qIdx + 1}/${aktifSorular.length}`);
-    let yuzde = ((qIdx) / aktifSorular.length) * 100;
-    $("#quiz-progress-bar").css("width", yuzde + "%");
+    $("#soru-sayaci-yazi").text(`Soru ${index + 1}/${soruHavuzu.length}`);
+    $("#quiz-progress-bar").css("width", ((index) / soruHavuzu.length * 100) + "%");
 
-    let tSoru = $('<div>').text(soruNesnesi.soru).html();
-    $("#soru-metni").html(`<span class="badge bg-secondary me-2">${soruNesnesi.zorluk}</span> ${tSoru}`);
+    let gSoru = $('<div>').text(soruBilgisi.soru).html();
+    $("#soru-metni").html(`<span class="badge bg-secondary me-2">${soruBilgisi.zorluk}</span> ${gSoru}`);
     
-    let seceneklerAlani = $("#secenekler-alani");
-    seceneklerAlani.empty();
+    let alan = $("#secenekler-alani");
+    alan.empty();
 
-    let karisikSiklar = soruNesnesi.secenekler.map((m, i) => { return { metin: m, index: i }; });
-    karisikSiklar.sort(() => Math.random() - 0.5);
+    // Şıkları Karıştır
+    let karisik = soruBilgisi.secenekler.map((m, i) => { return { metin: m, index: i }; });
+    karisik.sort(() => Math.random() - 0.5);
 
-    karisikSiklar.forEach((obj) => {
-        let tSik = $('<div>').text(obj.metin).html();
-        let buton = $(`<button class="secenek-btn w-100">${tSik}</button>`);
-        buton.click(function() {
-            oyuncuCevapVer(obj.index, this);
-        });
-        seceneklerAlani.append(buton);
+    karisik.forEach(obj => {
+        let gSik = $('<div>').text(obj.metin).html();
+        let btn = $(`<button class="secenek-btn w-100">${gSik}</button>`);
+        btn.click(function() { oyuncuCevapVer(obj.index, this); });
+        alan.append(btn);
     });
 
-    sureDegeri = 20;
-    clearInterval(sayac);
-    $("#sayac-metni").text(sureDegeri);
-    sayac = setInterval(() => {
-        sureDegeri--;
-        $("#sayac-metni").text(sureDegeri);
-        if(sureDegeri <= 0) {
-            clearInterval(sayac);
+    // Sayacı Başlat
+    kalanSure = 20;
+    clearInterval(zamanSayaci);
+    $("#sayac-metni").text(kalanSure);
+    
+    zamanSayaci = setInterval(() => {
+        kalanSure--;
+        $("#sayac-metni").text(kalanSure);
+        if (kalanSure <= 0) {
+            clearInterval(zamanSayaci);
             $(".secenek-btn").prop("disabled", true);
-            can--;
-            canlariCiz();
-            seceneklerAlani.prepend('<div class="alert alert-danger fw-bold text-center">Süre Bitti! Cevap veremediniz.</div>');
-            oyuncuCevapGonder(-1, false, 0); 
+            canGitti();
+            alan.prepend('<div class="alert alert-danger fw-bold text-center">Süre Bitti!</div>');
+            oyuncuCevabiGonder(-1, false, 0); 
         }
     }, 1000);
 }
 
-function oyuncuCevapVer(secilenIndeks, butonElement) {
-    clearInterval(sayac);
-    let tumSecenekler = $(".secenek-btn");
-    tumSecenekler.prop("disabled", true);
+function oyuncuCevapVer(secilenIndeks, butonHTML) {
+    clearInterval(zamanSayaci);
+    $(".secenek-btn").prop("disabled", true);
     
-    let soruNesnesi = aktifSorular[currentQuestionIndex];
-    let isCorrect = (secilenIndeks === soruNesnesi.dogruCevap);
+    let soruBilgisi = soruHavuzu[suAnkiSoruSirasi];
+    let dogruMu = (secilenIndeks === soruBilgisi.dogruCevap);
     
-    let timeTakenMs = Date.now() - questionStartTime;
-    let timeTakenSec = Math.floor(timeTakenMs / 1000);
-    
-    let points = 0;
-    if(isCorrect) {
-        sesDogru.play().catch(e=>{});
-        $(butonElement).addClass("dogru").append(' <span class="float-end">✅ 😎</span>');
-        points = Math.max(10, 100 - (timeTakenSec * 5));
+    let gecenSaniye = Math.floor((Date.now() - soruBaslamaZamani) / 1000);
+    let kazanilanPuan = 0;
+
+    if (dogruMu) {
+        $(butonHTML).addClass("dogru").append(' <span class="float-end">✅ 😎</span>');
+        kazanilanPuan = Math.max(10, 100 - (gecenSaniye * 5)); // Hız Bonusu
     } else {
-        sesYanlis.play().catch(e=>{});
-        $(butonElement).addClass("yanlis").append(' <span class="float-end">❌</span>');
-        can--;
-        canlariCiz();
+        $(butonHTML).addClass("yanlis").append(' <span class="float-end">❌</span>');
+        canGitti();
     }
 
-    $("#secenekler-alani").prepend('<div class="alert alert-success fw-bold text-center"><i class="bi bi-check-circle-fill"></i> Cevabınız kaydedildi! Host bekleniyor...</div>');
-
-    oyuncuCevapGonder(secilenIndeks, isCorrect, points, timeTakenSec);
+    $("#secenekler-alani").prepend('<div class="alert alert-success fw-bold text-center"><i class="bi bi-hourglass-split"></i> Kaydedildi! Host bekleniyor...</div>');
+    oyuncuCevabiGonder(secilenIndeks, dogruMu, kazanilanPuan);
 }
 
-function oyuncuCevapGonder(secilenIndeks, isCorrect, points, timeTakenSec = 20) {
-    db.ref(`rooms/${roomCode}/answers/${currentQuestionIndex}/${playerId}`).set({
-        answer: secilenIndeks,
-        correct: isCorrect,
-        points: points,
-        time: timeTakenSec
+function oyuncuCevabiGonder(cevapIndeks, dogruMu, puan) {
+    // 1. Cevabı Veritabanına Yaz
+    Veritabani.yaz(`odalar/${odayaAitKod}/cevaplar/${suAnkiSoruSirasi}/${oyuncuID}`, {
+        cevap: cevapIndeks,
+        puanAldi: puan
     });
 
-    if(points > 0) {
-        db.ref(`rooms/${roomCode}/players/${playerId}`).once('value').then(snap => {
-            let p = snap.val();
-            db.ref(`rooms/${roomCode}/players/${playerId}`).update({
-                score: p.score + points
-            });
+    // 2. Kazanılan Puanı Oyuncuya Ekle
+    if (puan > 0) {
+        Veritabani.oku(`odalar/${odayaAitKod}/oyuncular/${oyuncuID}/puan`).then(eskiPuan => {
+            Veritabani.yaz(`odalar/${odayaAitKod}/oyuncular/${oyuncuID}/puan`, (eskiPuan || 0) + puan);
         });
     }
 }
 
-function canlariCiz() {
+function canGitti() {
+    canSayisi--;
     let html = "";
-    for(let i=0; i<3; i++) {
-        if(i < can) html += '<i class="bi bi-heart-fill"></i> ';
+    for (let i = 0; i < 3; i++) {
+        if (i < canSayisi) html += '<i class="bi bi-heart-fill"></i> ';
         else html += '<i class="bi bi-heartbreak text-muted"></i> ';
     }
     $("#can-kapsayici").html(html);
 }
 
-function ortakSonucuGoster() {
-    clearInterval(sayac);
+function oyunuBitirveGoster() {
+    clearInterval(zamanSayaci);
     $("#quiz-ekrani").addClass("d-none");
     
-    let sonucModal = new bootstrap.Modal(document.getElementById('sonucModal'));
+    let modal = new bootstrap.Modal(document.getElementById('sonucModal'));
     
-    if(isHost) {
-        $("#modal-puan").text("Tablodan Bakınız");
-        $("#rozet-isim").text("Sınav Tamamlandı");
+    if (benHostum) {
+        $("#modal-puan").text("Tablodan İnceleyin");
+        $("#rozet-isim").text("Sınav Tamamlandı!");
+        $("#rozet-ikon").text("🏆");
     } else {
-        $("#modal-puan").text(oyuncuPuani);
-        if(can <= 0) {
+        $("#modal-puan").text(toplamPuanim);
+        if (canSayisi <= 0) {
             $("#rozet-ikon").text("💀");
-            $("#rozet-isim").text("Game Over");
-        } else if(oyuncuPuani > 800) {
+            $("#rozet-isim").text("Elenerek Bitti");
+        } else if (toplamPuanim > 800) {
             $("#rozet-ikon").text("👑");
             $("#rozet-isim").text("JS Ninja");
         } else {
-            $("#rozet-ikon").text("🏆");
-            $("#rozet-isim").text("Web Master");
+            $("#rozet-ikon").text("🎖️");
+            $("#rozet-isim").text("Başarılı");
         }
     }
 
-    sonucModal.show();
+    modal.show();
 }
