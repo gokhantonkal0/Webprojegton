@@ -89,6 +89,8 @@ $(document).ready(function() {
                 oyuncuHostDurumunuYorumla(veri);
             }
             else if (yolTuru === "Liderlik") {
+                // Herkes için tabloyu çiz
+                ortakLiderlikTablosunuCiz(veri);
                 // Kendi puanını bul ve UI güncelle
                 if(veri[oyuncuID]) {
                     toplamPuanim = veri[oyuncuID].puan;
@@ -153,35 +155,12 @@ function hostOdasiniKur() {
 }
 
 function hostLiderligiGuncelleVeYayinla() {
-    // 1. Veriyi Odaya Yayınla (Oyuncular Puanlarını Görsün Diye)
+    // 1. Veriyi Odaya Yayınla (Tüm Ekranlar Güncellensin Diye)
     mqttYayinla(`GTonkalQuiz/${odaKodu}/Liderlik`, hostOyuncuListesi);
+    // 2. Kendi Ekranını Çiz
+    ortakLiderlikTablosunuCiz(hostOyuncuListesi);
 
-    // 2. Kendi Ekranındaki Tabloyu Çiz
-    let tablo = $("#liderlik-tablosu");
-    tablo.empty();
-    
-    let liste = Object.keys(hostOyuncuListesi).map(k => hostOyuncuListesi[k]);
-    liste.sort((a, b) => b.puan - a.puan);
-    
-    let kisiSayisi = liste.length;
-    
-    liste.forEach((kisi, sira) => {
-        let madalyaClass = sira === 0 ? "top-1" : (sira === 1 ? "top-2" : (sira === 2 ? "top-3" : ""));
-        tablo.append(`
-            <li class="list-group-item liderlik-item ${madalyaClass}">
-                <div class="d-flex align-items-center">
-                    <span class="liderlik-sira shadow-sm">${sira + 1}</span>
-                    <span class="text-truncate fw-bold">${kisi.isim}</span>
-                </div>
-                <div class="text-end">
-                    <span class="badge bg-primary rounded-pill px-2 py-1">${kisi.puan} Puan</span>
-                </div>
-            </li>
-        `);
-    });
-
-    if(kisiSayisi === 0) tablo.append('<li class="list-group-item text-muted text-center py-4">Bekleniyor...</li>');
-
+    let kisiSayisi = Object.keys(hostOyuncuListesi).length;
     $("#host-oyuncu-sayisi").text(kisiSayisi);
     $("#host-toplam-oyuncu").text(kisiSayisi);
     $("#btn-host-baslat").prop("disabled", kisiSayisi === 0);
@@ -337,7 +316,9 @@ function oyuncuCevapVer(secilenIndeks, butonHTML, soruVerisi) {
 
     if (dogruMu) {
         $(butonHTML).addClass("dogru").append(' <span class="float-end">✅ 😎</span>');
-        kazanilanPuan = Math.max(10, kalanSure * 5); // 20 saniyede max 100
+        // Kahoot tarzı 1000 üzerinden puan (Milisaniyeye göre hassas)
+        let kalanMs = Math.max(0, soruVerisi.bitisZamani - Date.now());
+        kazanilanPuan = Math.max(10, Math.floor((kalanMs / 20000) * 1000));
     } else {
         $(butonHTML).addClass("yanlis").append(' <span class="float-end">❌</span>');
         canGitti();
@@ -359,6 +340,39 @@ function oyuncuCevabiGonder(cevapIndeks, dogruMu, puan) {
 // ==========================================
 // ORTAK FONKSİYONLAR
 // ==========================================
+function ortakLiderlikTablosunuCiz(listeObjesi) {
+    let tablo = $("#liderlik-tablosu");
+    tablo.empty();
+    
+    if(!listeObjesi) return;
+
+    let liste = Object.keys(listeObjesi).map(k => listeObjesi[k]);
+    liste.sort((a, b) => b.puan - a.puan); // Puana göre çoktan aza
+    
+    if (liste.length === 0) {
+        tablo.append('<li class="list-group-item text-muted text-center py-4">Oyuncu bekleniyor...</li>');
+        return;
+    }
+
+    liste.forEach((kisi, sira) => {
+        let madalyaClass = sira === 0 ? "top-1" : (sira === 1 ? "top-2" : (sira === 2 ? "top-3" : ""));
+        // Eğer kendisiyse farklı renkte vurgula
+        let isimVurgu = kisi.isim === oyuncuAdi ? `<span class="text-success fw-bold">${kisi.isim} (Sen)</span>` : `<span class="text-truncate fw-bold">${kisi.isim}</span>`;
+        
+        tablo.append(`
+            <li class="list-group-item liderlik-item ${madalyaClass}">
+                <div class="d-flex align-items-center">
+                    <span class="liderlik-sira shadow-sm">${sira + 1}</span>
+                    ${isimVurgu}
+                </div>
+                <div class="text-end">
+                    <span class="badge bg-primary rounded-pill px-2 py-1">${kisi.puan} Puan</span>
+                </div>
+            </li>
+        `);
+    });
+}
+
 function mqttYayinla(topic, dataObj) {
     // Retain true: Son girenler statüyü anında okuyabilsin diye
     mqttClient.publish(topic, JSON.stringify(dataObj), { retain: true });
