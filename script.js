@@ -145,8 +145,23 @@ let toplamPuanim = 0;
 let canSayisi = 3;
 
 // UI HAZIRLIK
+$(window).on('load', function() {
+    setTimeout(() => {
+        $("#loading-ekrani").css("opacity", "0");
+        setTimeout(() => $("#loading-ekrani").remove(), 500);
+    }, 400);
+});
+
 $(document).ready(function() {
     Veritabani.baslat();
+    
+    // Günün Sorusunu Belirle (Sabit Havuzdan)
+    if(soruHavuzu.length > 0) {
+        let bugun = new Date();
+        let index = (bugun.getFullYear() + bugun.getMonth() + bugun.getDate()) % soruHavuzu.length;
+        let tGunun = $('<div>').text(soruHavuzu[index].soru).html();
+        $("#gunun-sorusu-metni").html(`<strong>[${soruHavuzu[index].kategori} - ${soruHavuzu[index].zorluk}]</strong> ${tGunun}`);
+    }
 
     // Linkten gelen oda kodu varsa
     const urlParametreleri = new URLSearchParams(window.location.search);
@@ -164,6 +179,10 @@ $(document).ready(function() {
     $("#btn-host-baslat").click(() => hostOyunuBaslat());
     $("#btn-host-sonraki").click(() => hostSonrakiSoru());
     $("#btn-host-bitir").click(() => Veritabani.yaz(`odalar/${odayaAitKod}/durum`, "bitti"));
+    
+    // Admin Paneli ve Yeniden Oynama (Hata vermesin diye)
+    $("#btn-admin-panel").click(function() { alert("Admin paneli şu an multiplayer modda devre dışıdır."); });
+    $("#btn-modal-yeniden").click(function() { window.location.href = window.location.pathname; });
     
     // Dark Mode
     $("#btn-dark-mode").click(function() {
