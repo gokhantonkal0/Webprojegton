@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Bilgisi Quiz Multiplayer</title>
+    <title>Online Web Sınavı</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
@@ -24,7 +24,7 @@
     <!-- Navigasyon Çubuğu -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
         <div class="container">
-            <a class="navbar-brand fw-bold" href="#" id="nav-brand-btn"><i class="bi bi-code-slash me-2"></i>WebQuiz Pro <span class="badge bg-danger ms-1">LIVE</span></a>
+            <a class="navbar-brand fw-bold" href="#" id="nav-brand-btn"><i class="bi bi-code-slash me-2"></i>Online Web Sınavı <span class="badge bg-danger ms-1">LIVE</span></a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -41,19 +41,6 @@
     <!-- Ana Konteyner -->
     <div class="container py-4 min-vh-100 d-flex flex-column justify-content-start">
         
-        <!-- Günün Sorusu Paneli -->
-        <div class="row mb-4 justify-content-center" id="gunun-sorusu-kapsayici">
-            <div class="col-lg-12">
-                <div class="alert alert-info shadow-sm border-info d-flex align-items-center">
-                    <i class="bi bi-calendar2-check-fill fs-3 me-3 text-info"></i>
-                    <div>
-                        <h5 class="alert-heading mb-1 fw-bold">Bugünün Web Sorusu</h5>
-                        <p class="mb-0" id="gunun-sorusu-metni">Yükleniyor...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <div class="row w-100 justify-content-center mx-0 align-items-start" id="main-row">
             
             <!-- Ana Kart Sütunu -->
@@ -92,6 +79,38 @@
                             
                             <p class="small text-muted">Oyuncular aşağıdaki linkten katılabilir:<br> <a href="#" id="host-join-link" target="_blank" class="text-primary text-break">Link</a></p>
 
+                            <!-- Filtreleme (Sadece Host) -->
+                            <div id="host-filtre-alani" class="bg-light p-3 rounded mb-3 text-start border d-none">
+                                <h6 class="fw-bold mb-3"><i class="bi bi-funnel-fill"></i> Sınav Ayarları</h6>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <select id="secim-kategori" class="form-select form-select-sm">
+                                            <option value="Tümü" selected>Kategori (Tümü)</option>
+                                            <option value="HTML">HTML</option>
+                                            <option value="CSS">CSS</option>
+                                            <option value="JavaScript">JavaScript</option>
+                                            <option value="Bootstrap">Bootstrap</option>
+                                            <option value="jQuery">jQuery</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <select id="secim-zorluk" class="form-select form-select-sm">
+                                            <option value="Tümü" selected>Zorluk (Tümü)</option>
+                                            <option value="Kolay">Kolay</option>
+                                            <option value="Orta">Orta</option>
+                                            <option value="Zor">Zor</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <select id="secim-sayi" class="form-select form-select-sm">
+                                            <option value="10" selected>10 Soru</option>
+                                            <option value="20">20 Soru</option>
+                                            <option value="30">30 Soru</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
                             <button id="btn-host-baslat" class="btn btn-success btn-lg w-100 fw-bold shadow mt-2" disabled>🚀 Sınavı Başlat (<span id="host-oyuncu-sayisi">0</span> Katılımcı)</button>
                         </div>
 
@@ -126,9 +145,7 @@
                             <!-- Üst Bilgi Çubuğu (Can, Süre) -->
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div class="fs-4 text-danger" id="can-kapsayici">
-                                    <i class="bi bi-heart-fill"></i>
-                                    <i class="bi bi-heart-fill"></i>
-                                    <i class="bi bi-heart-fill"></i>
+                                    <!-- Canlar -->
                                 </div>
                                 <div class="fs-4 fw-bold text-dark timer-badge">
                                     <i class="bi bi-stopwatch"></i> <span id="sayac-metni">20</span>s
@@ -140,26 +157,39 @@
                                 <span class="badge bg-secondary" id="soru-sayaci-yazi">Soru yükleniyor...</span>
                                 <span class="badge bg-info text-dark" id="puan-gosterge">Puan: 0</span>
                             </div>
-                            <div class="progress mb-4" style="height: 10px;">
-                                <div id="quiz-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 10%;"></div>
+                            <div class="progress mb-3 bg-secondary bg-opacity-25" style="height: 10px; border-radius: 10px;">
+                                <div id="quiz-progress-bar" class="progress-bar bg-success" role="progressbar" style="width: 100%;"></div>
+                            </div>
+
+                            <!-- JOKERLER ALANI -->
+                            <div class="d-flex justify-content-center gap-2 mb-3 joker-area">
+                                <button id="btn-joker-50" class="btn btn-warning btn-sm fw-bold shadow-sm rounded-pill px-3" title="50/50: 2 Yanlış Şıkkı Eler">
+                                    <i class="bi bi-magic me-1"></i> 50/50
+                                </button>
+                                <button id="btn-joker-cift" class="btn btn-info btn-sm text-dark fw-bold shadow-sm rounded-pill px-3" title="Çift Cevap: Yanlış yapsan bile 2. kez seçme hakkı verir. Puanın yarısını kazandırır.">
+                                    <i class="bi bi-bullseye me-1"></i> Çift Cevap
+                                </button>
+                                <button id="btn-joker-pas" class="btn btn-secondary btn-sm fw-bold shadow-sm rounded-pill px-3" title="Pas: Soruyu puan veya eksi almadan es geçer.">
+                                    <i class="bi bi-skip-forward-fill me-1"></i> Pas
+                                </button>
                             </div>
                             
                             <!-- Soru Metni -->
-                            <h4 id="soru-metni" class="mb-4 text-start fw-bold lh-base" style="min-height: 60px;">Soru metni buraya gelecek...</h4>
+                            <div class="bg-light p-4 rounded-4 mb-4 border shadow-sm text-start position-relative">
+                                <h4 id="soru-metni" class="fw-bold lh-base text-dark mb-0 mt-2" style="min-height: 60px;">Soru metni buraya gelecek...</h4>
+                            </div>
                             
                             <!-- Seçenekler Alanı -->
                             <div id="secenekler-alani" class="d-flex flex-column gap-3 text-start mb-4">
                                 <!-- Şıklar dinamik olarak yüklenecek -->
                             </div>
                             
-                            <!-- Host Kontrol Alanı (Sadece Host'ta görünür) -->
-                            <div id="host-kontrol-alani" class="mt-4 d-none">
-                                <div class="alert alert-warning text-dark text-start mb-3">
-                                    <i class="bi bi-info-circle-fill"></i> <strong>Host Paneli:</strong> Şu an bu soruyu <span id="host-cevap-veren-sayisi" class="fw-bold">0</span>/<span id="host-toplam-oyuncu" class="fw-bold">0</span> kişi cevapladı.
-                                </div>
-                                <button id="btn-host-sonraki" class="btn btn-success btn-lg w-100 fw-bold shadow"><i class="bi bi-fast-forward-fill"></i> Sonraki Soruya Geç</button>
-                                <button id="btn-host-bitir" class="btn btn-danger w-100 fw-bold mt-2 d-none">Sınavı Bitir</button>
+                            <!-- Açıklama Paneli -->
+                            <div id="aciklama-paneli" class="d-none alert mt-3 text-start shadow-sm border">
+                                <h6 class="alert-heading fw-bold" id="aciklama-baslik"><i class="bi bi-lightbulb-fill text-warning me-1"></i> Biliyor muydun?</h6>
+                                <p id="aciklama-metni" class="mb-0 fs-6"></p>
                             </div>
+                            
                         </div>
 
                     </div>
@@ -181,35 +211,91 @@
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="bg-dark text-white text-center py-3 mt-auto">
-        <div class="container">
-            <p class="mb-0">Designed & Developed by <span class="fw-bold text-warning">Gökhan Tonkal</span></p>
-        </div>
-    </footer>
-
-    <!-- SONUÇ MODALI -->
-    <div class="modal fade" id="sonucModal" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
-            <div class="modal-content border-0 shadow-lg quiz-modal">
-                <div class="modal-header bg-primary text-white border-0">
-                    <h5 class="modal-title fw-bold"><i class="bi bi-flag-fill"></i> Sınav Tamamlandı!</h5>
-                </div>
-                <div class="modal-body text-center p-4">
-                    <div id="rozet-alani" class="mb-4">
-                        <h2 id="rozet-ikon" class="display-1 mb-2">🏆</h2>
-                        <h4 id="rozet-isim" class="text-primary fw-bold">Sonuçlar Yükleniyor...</h4>
+    <!-- ELENİŞ MODALI -->
+    <div class="modal fade" id="elenisModal" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" id="elenis-modal-content">
+                <div class="modal-header border-0 pb-0" style="background: linear-gradient(135deg, #dc3545, #7b0000); border-radius: 12px 12px 0 0;">
+                    <div class="w-100 text-center pt-2 pb-1">
+                        <div style="font-size: 4rem; line-height: 1;" id="elenis-ikon">💀</div>
+                        <h4 class="text-white fw-bold mt-2 mb-0" id="elenis-baslik">Elendiniz!</h4>
                     </div>
-                    <div class="fs-3 mb-3 fw-bold text-dark">Puanın: <span id="modal-puan">0</span></div>
                 </div>
-                <div class="modal-footer justify-content-center border-0 pb-4">
-                    <button type="button" class="btn btn-primary btn-lg px-5 fw-bold shadow" id="btn-modal-yeniden">Ana Ekrana Dön</button>
+                <div class="modal-body text-center px-4 py-4">
+                    <div class="alert border-0 mb-3" id="elenis-neden-kutu" style="background-color: #fff3cd; border-radius: 10px;">
+                        <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                        <span id="elenis-neden-metni" class="fw-semibold text-dark">Tüm canlarınızı kaybettiniz.</span>
+                    </div>
+                    <p class="text-muted mb-0 small">Yarışmayı izlemeye devam edebilir veya odadan ayrılabilirsiniz.</p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pb-4 gap-3">
+                    <button type="button" class="btn btn-outline-secondary btn-lg px-4 fw-bold" id="btn-elenis-ayril">
+                        <i class="bi bi-box-arrow-left me-2"></i>Odadan Ayrıl
+                    </button>
+                    <button type="button" class="btn btn-primary btn-lg px-4 fw-bold" id="btn-elenis-izle">
+                        <i class="bi bi-eye-fill me-2"></i>Yarışmayı İzle
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Ses Efektleri için Gizli Audio Tagleri -->
+    <!-- SONUÇ MODALI -->
+    <div class="modal fade" id="sonucModal" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="modal-header bg-success text-white border-0 py-3">
+                    <h5 class="modal-title fw-bold fs-4"><i class="bi bi-flag-fill me-2"></i> Sınav Tamamlandı!</h5>
+                </div>
+                <div class="modal-body p-4 p-md-5 bg-light">
+                    
+                    <div class="row g-4">
+                        <div class="col-lg-4 text-center d-flex flex-column gap-3">
+                            <div class="bg-white p-4 rounded-4 shadow-sm border">
+                                <h2 class="display-1 mb-2" id="rozet-ikon">🏆</h2>
+                                <h4 class="text-dark fw-bold mb-1" id="rozet-isim">Uzman</h4>
+                                <div class="display-3 fw-bold text-primary mb-0" id="modal-puan">0</div>
+                                <div class="text-muted small fw-bold mb-4">Toplam Puan</div>
+                            </div>
+                            
+                            <div class="bg-white p-3 rounded-4 shadow-sm border text-start">
+                                <h6 class="fw-bold text-danger mb-2"><i class="bi bi-graph-down-arrow"></i> Eksik Olduğun Konular</h6>
+                                <div id="analiz-icerik" class="fs-6"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-8">
+                            <div class="bg-white p-4 rounded-4 shadow-sm h-100 border d-flex flex-column">
+                                <h5 class="fw-bold mb-3"><i class="bi bi-clock-history"></i> Soru Geçmişi</h5>
+                                <div class="table-responsive flex-grow-1" style="max-height: 400px;">
+                                    <table class="table table-hover table-sm align-middle text-start">
+                                        <thead class="table-light sticky-top">
+                                            <tr>
+                                                <th style="width: 5%;">#</th>
+                                                <th style="width: 40%;">Soru</th>
+                                                <th style="width: 20%;">Cevabın</th>
+                                                <th style="width: 20%;">Doğru Cevap</th>
+                                                <th style="width: 15%;">Durum</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="sonuc-gecmis-tablosu"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer justify-content-center bg-white border-top py-4">
+                    <button type="button" class="btn btn-primary btn-lg px-5 fw-bold shadow-sm rounded-pill" id="btn-modal-yeniden">
+                        <i class="bi bi-house-door-fill me-1"></i> Ana Ekrana Dön
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ses Efektleri -->
     <audio id="ses-dogru" preload="auto">
         <source src="data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq" type="audio/mpeg">
     </audio>
@@ -218,17 +304,17 @@
     </audio>
 
     <!-- KÜTÜPHANELER -->
-    <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- QRCode.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    
-    <!-- MQTT.js (Firebase yerine tamamen ücretsiz ve key istemeyen Canlı Sunucu) -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
-    <!-- JS -->
-    <script src="script.js"></script>
+    <!-- JS DOSYALARI -->
+    <script src="questions.js"></script>
+    <script src="helpers.js"></script>
+    <script src="effects.js"></script>
+    <script src="mqtt-service.js"></script>
+    <script src="ui.js"></script>
+    <script src="game.js"></script>
 </body>
 </html>
