@@ -66,6 +66,18 @@ $(document).ready(function () {
         $("#quiz-ekrani").removeClass("d-none");
     });
 
+    $("#btn-geri-lobi").click(() => {
+        $("#host-lobi-ekrani").addClass("d-none");
+        $("#rol-secim-ekrani").removeClass("d-none");
+        if(mqttClient) { mqttClient.end(); mqttClient = null; connectMQTT(null, onMqttMessage); }
+        odaSahibiMi = false; odaKodu = ""; hostOyuncuListesi = {};
+    });
+    
+    $("#btn-geri-oyuncu").click(() => {
+        $("#oyuncu-giris-ekrani").addClass("d-none");
+        $("#rol-secim-ekrani").removeClass("d-none");
+    });
+
     // Joker Butonları
     $("#btn-joker-50").click(function() { if (!joker50Kullanildi && !secimYapildiMi) joker50Kullan(); });
     $("#btn-joker-cift").click(function() { if (!jokerCiftKullanildi && !secimYapildiMi) jokerCiftKullan(); });
@@ -233,7 +245,7 @@ function oyunDurumunuYorumla(veri) {
     if (veri.durum === "bitti") {
         clearInterval(zamanSayaci);
         $("#quiz-ekrani").addClass("d-none");
-        sonucModalCizUI(soruGecmisi, yanlisKonular, toplamPuanim, canSayisi, veri.kazanan?.id, oyuncuID);
+        sonucModalCizUI(soruGecmisi, yanlisKonular, toplamPuanim, canSayisi, veri.kazanan?.id, oyuncuID, veri.siralama);
     }
 }
 

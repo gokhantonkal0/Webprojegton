@@ -144,7 +144,8 @@ function oyuncuSoruyuCizUI(soruVerisi, benimCanSayisi, onClickCallback) {
     karisik = shuffleArray(karisik);
 
     karisik.forEach((obj, idx) => {
-        let btn = $(`<button class="secenek-btn w-100 fw-bold" data-index="${obj.originalIndex}"><span class="badge bg-light text-dark me-2 border">${harfler[idx]})</span> ${guvenliYazi(obj.metin)}</button>`);
+        let temizMetin = obj.metin.replace(/^[A-D][\)\-\.]\s*/i, '');
+        let btn = $(`<button class="secenek-btn w-100 fw-bold" data-index="${obj.originalIndex}"><span class="badge bg-light text-dark me-2 border">${harfler[idx]})</span> ${guvenliYazi(temizMetin)}</button>`);
         btn.click(function (e) {
             onClickCallback(obj.originalIndex, this, e);
         });
@@ -204,7 +205,7 @@ function elenisPopupGosterUI(neden) {
     modal.show();
 }
 
-function sonucModalCizUI(oyuncuGecmisi, zayifKonular, genelPuan, canSayisi, kazananID, benimOyuncuID) {
+function sonucModalCizUI(oyuncuGecmisi, zayifKonular, genelPuan, canSayisi, kazananID, benimOyuncuID, siralama) {
     // Eleniş modalı kapat
     let elenisModalEl = document.getElementById("elenisModal");
     if (elenisModalEl) {
@@ -215,18 +216,38 @@ function sonucModalCizUI(oyuncuGecmisi, zayifKonular, genelPuan, canSayisi, kaza
     let modal = new bootstrap.Modal(document.getElementById("sonucModal"));
     $("#modal-puan").text(genelPuan);
 
+    let teselli = "";
     if (canSayisi <= 0) {
         $("#rozet-ikon").text("💀");
         $("#rozet-isim").text("Elendin");
+        teselli = "Sağlık olsun, sen harikasın, cansın! Bir dahakine kesin yaparsın.";
     } else if (kazananID === benimOyuncuID) {
         $("#rozet-ikon").text("🏆");
         $("#rozet-isim").text("Kazandın!");
+        teselli = "Tebrikler şampiyon, cansın! Harika bir iş çıkardın.";
     } else if (genelPuan > 200) {
         $("#rozet-ikon").text("👑");
         $("#rozet-isim").text("Başarılı Oyuncu");
+        teselli = "Gayet iyiydin, cansın! Biraz daha pratikle zirvedesin.";
     } else {
         $("#rozet-ikon").text("🎖️");
         $("#rozet-isim").text("Quiz Tamamlandı");
+        teselli = "Emeğine sağlık, cansın! Hatalarından öğrenmek en büyük başarıdır.";
+    }
+    $("#teselli-mesaji").text(teselli);
+
+    // PODYUM CIZIMI
+    if (siralama && siralama.length > 0) {
+        $("#podyum-kapsayici").removeClass("d-none").addClass("d-flex");
+        let html1 = siralama.length > 0 ? `<div class="podyum-box bg-warning text-dark p-3 rounded-top shadow" style="height: 120px;"><h2>1</h2><div class="fw-bold text-truncate">${guvenliYazi(siralama[0].isim)}</div><small>${siralama[0].puan} P</small></div>` : "";
+        let html2 = siralama.length > 1 ? `<div class="podyum-box bg-secondary text-white p-3 rounded-top shadow" style="height: 90px;"><h2>2</h2><div class="fw-bold text-truncate">${guvenliYazi(siralama[1].isim)}</div><small>${siralama[1].puan} P</small></div>` : "";
+        let html3 = siralama.length > 2 ? `<div class="podyum-box bg-danger text-white p-3 rounded-top shadow" style="height: 70px;"><h2>3</h2><div class="fw-bold text-truncate">${guvenliYazi(siralama[2].isim)}</div><small>${siralama[2].puan} P</small></div>` : "";
+        
+        $("#podyum-1").html(html1);
+        $("#podyum-2").html(html2);
+        $("#podyum-3").html(html3);
+    } else {
+        $("#podyum-kapsayici").addClass("d-none").removeClass("d-flex");
     }
 
     // Zayıf konu analizi çizimi

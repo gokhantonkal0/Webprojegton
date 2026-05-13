@@ -1,4 +1,4 @@
-const questions = [
+﻿const questions = [
     {
         "question": "HTML5 nedir?",
         "options": [
