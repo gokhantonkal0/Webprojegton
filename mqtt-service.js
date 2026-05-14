@@ -1,65 +1,59 @@
-// mqtt-service.js
-// Güvenlik duvarlarına takılmamak için 8084 veya alternatif public broker kullanıyoruz
-const MQTT_BROKER = "wss://broker.emqx.io:8084/mqtt";
-let mqttClient;
-let abonelikler = [];
-let bekleyenMesajlar = [];
-let baglantiZamanAsimi;
+// mqtt-service.js (Tamamen Yerel Ağ - İnternetsiz Çok Oyunculu)
+
+let broadcastChannel;
+let messageCallback;
+
+// `game.js` içinde `mqttClient.end()` gibi çağrılar için sahte nesne
+let mqttClient = {
+    connected: false,
+    end: function() {
+        if (broadcastChannel) broadcastChannel.close();
+        this.connected = false;
+    }
+};
 
 function connectMQTT(onConnectCallback, onMessageCallback) {
-    mqttClient = mqtt.connect(MQTT_BROKER);
+    if (broadcastChannel) {
+        broadcastChannel.close();
+    }
+    
+    // Sekmeler arası iletişim için BroadcastChannel (Aynı tarayıcıda çalışan sekmeler)
+    broadcastChannel = new BroadcastChannel("GTonkalQuiz_LocalChannel");
+    messageCallback = onMessageCallback;
+    mqttClient.connected = true;
 
-    // Bağlantı 5 saniye içinde kurulamazsa uyarı ver
-    baglantiZamanAsimi = setTimeout(() => {
-        if (!mqttClient.connected) {
-            alert("⚠️ Sunucuya bağlanılamadı. Lütfen internet bağlantınızı veya okul/şirket ağınızın izinlerini kontrol edin. (F5 ile sayfayı yenileyebilirsiniz)");
+    // Diğer sekmelerden gelen mesajlar
+    broadcastChannel.onmessage = function(event) {
+        let msg = event.data;
+        if (messageCallback) {
+            let topic = msg.topic;
+            let veri = msg.data;
+            let kanal = topic.split("/").pop();
+            messageCallback(kanal, veri);
         }
-    }, 5000);
+    };
 
-    mqttClient.on("connect", function () {
-        console.log("MQTT bağlandı");
-        clearTimeout(baglantiZamanAsimi); // Başarılı bağlanırsa zaman aşımını iptal et
-        
-        // Bekleyen abonelikleri yap
-        abonelikler.forEach(topic => mqttClient.subscribe(topic));
-        
-        // Bekleyen mesajları gönder
-        bekleyenMesajlar.forEach(msg => {
-            mqttClient.publish(msg.topic, JSON.stringify(msg.dataObj), { retain: true });
-        });
-        bekleyenMesajlar = []; // Gönderdikten sonra temizle
-
-        if (onConnectCallback) onConnectCallback();
-    });
-
-    mqttClient.on("message", function (topic, message) {
-        let veri;
-        try {
-            veri = JSON.parse(message.toString());
-        } catch (e) {
-            return;
-        }
-
-        let kanal = topic.split("/").pop();
-        if (onMessageCallback) onMessageCallback(kanal, veri);
-    });
+    console.log("Local Bağlantı Sağlandı (İnternetsiz Çok Oyunculu)");
+    if (onConnectCallback) {
+        setTimeout(onConnectCallback, 50);
+    }
 }
 
 function mqttYayinla(topic, dataObj) {
-    if (mqttClient && mqttClient.connected) {
-        mqttClient.publish(topic, JSON.stringify(dataObj), { retain: true });
-    } else {
-        // Bağlı değilse sıraya ekle
-        bekleyenMesajlar.push({ topic, dataObj });
+    if (broadcastChannel) {
+        // Diğer sekmelere gönder
+        broadcastChannel.postMessage({ topic: topic, data: dataObj });
+    }
+    
+    // MQTT broker kendi yayınladığımızı bize geri yollar, BroadcastChannel yollamaz.
+    // Bu yüzden kendi kendimize de asenkron olarak tetikliyoruz (Tam MQTT simülasyonu)
+    if (messageCallback) {
+        let kanal = topic.split("/").pop();
+        setTimeout(() => messageCallback(kanal, dataObj), 10);
     }
 }
 
 function mqttAboneOl(topic) {
-    if (!abonelikler.includes(topic)) {
-        abonelikler.push(topic);
-    }
-    
-    if (mqttClient && mqttClient.connected) {
-        mqttClient.subscribe(topic);
-    }
+    // BroadcastChannel tüm mesajları alır, abonelik simüle edilir.
+    console.log("Abone olundu: " + topic);
 }

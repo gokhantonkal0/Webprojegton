@@ -163,41 +163,26 @@ function liderligiYayinla() {
 
 // HOST - OYUN BAŞLAT
 function oyunuBaslat() {
-    try {
-        if (!odaSahibiMi) return;
-        
-        let k = $("#secim-kategori").val();
-        let z = $("#secim-zorluk").val();
-        secilenSoruSayisi = parseInt($("#secim-sayi").val());
-        
-        if (typeof questions === "undefined") {
-            alert("Hata: questions listesi yüklenemedi! Lütfen sayfayı yenileyin.");
-            return;
-        }
-
-        let filtrelenmis = questions.filter(q => (k==="Tümü"||q.category===k) && (z==="Tümü"||q.difficulty===z));
-        if (filtrelenmis.length === 0) { alert("Bu filtrelere uygun soru bulunamadı."); return; }
-        
-        oyananacakSorular = shuffleArray(filtrelenmis).slice(0, secilenSoruSayisi);
-        
-        oyunBasladiMi = true;
-        Object.keys(hostOyuncuListesi).forEach(id => {
-            hostOyuncuListesi[id].puan = 0; hostOyuncuListesi[id].can = 5; 
-            hostOyuncuListesi[id].hayatta = true; hostOyuncuListesi[id].cevapVerdi = false;
-            hostOyuncuListesi[id].streak = 0; hostOyuncuListesi[id].pasSayisi = 0;
-        });
-        
-        liderligiYayinla();
-        
-        if (!mqttClient || !mqttClient.connected) {
-            alert("Uyarı: Sunucuya bağlantı henüz sağlanmadı. Bağlantı kurulduğunda sınav otomatik başlayacaktır.");
-        }
-        
-        soruGonder(0);
-    } catch (e) {
-        alert("Sınav başlatılırken hata oluştu: " + e.message);
-        console.error("Başlatma hatası:", e);
-    }
+    if (!odaSahibiMi) return;
+    
+    let k = $("#secim-kategori").val();
+    let z = $("#secim-zorluk").val();
+    secilenSoruSayisi = parseInt($("#secim-sayi").val());
+    
+    let filtrelenmis = questions.filter(q => (k==="Tümü"||q.category===k) && (z==="Tümü"||q.difficulty===z));
+    if (filtrelenmis.length === 0) { alert("Bu filtrelere uygun soru bulunamadı."); return; }
+    
+    oyananacakSorular = shuffleArray(filtrelenmis).slice(0, secilenSoruSayisi);
+    
+    oyunBasladiMi = true;
+    Object.keys(hostOyuncuListesi).forEach(id => {
+        hostOyuncuListesi[id].puan = 0; hostOyuncuListesi[id].can = 5; 
+        hostOyuncuListesi[id].hayatta = true; hostOyuncuListesi[id].cevapVerdi = false;
+        hostOyuncuListesi[id].streak = 0; hostOyuncuListesi[id].pasSayisi = 0;
+    });
+    
+    liderligiYayinla();
+    soruGonder(0);
 }
 
 // HOST - SORU GÖNDER
